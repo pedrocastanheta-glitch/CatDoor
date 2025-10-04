@@ -16,8 +16,9 @@ OPEN_COOLDOWN_SEC = 4.0
 CLOSE_DELAY_SEC = 5.0
 
 # --- PIR LED constants ---
-PIR_PIN = 22
-LED_PIN = 27
+PIR_PIN = 27      # Sensor 1 GPIO
+PIR2_PIN = 10     # Sensor 2 GPIO
+LED_PIN = 22      # LED GPIO (choose a free pin, not 27 or 10)
 LED_HOLD_SECONDS = 30
 
 # --- Flask & Camera ---
@@ -208,23 +209,33 @@ def detection_loop():
 def pir_led_manager():
     global _pir_off_timer
     try:
-        pir = MotionSensor(PIR_PIN); led = LED(LED_PIN)
+        pir1 = MotionSensor(PIR_PIN)
+        pir2 = MotionSensor(PIR2_PIN)
+        led = LED(LED_PIN)
     except Exception as e:
         print(f"[PIR_LED] Failed to initialize GPIO: {e}. Feature disabled."); return
 
     def handle_motion():
         global _pir_off_timer
-        if not led.is_lit: print("[PIR_LED] Motion detected -> LED ON"); led.on()
-        if _pir_off_timer: _pir_off_timer.cancel()
+        if not led.is_lit:
+            print("[PIR_LED] Motion detected (any PIR) -> LED ON")
+            led.on()
+        if _pir_off_timer:
+            _pir_off_timer.cancel()
         _pir_off_timer = threading.Timer(LED_HOLD_SECONDS, lambda: (print(f"[PIR_LED] No motion for {LED_HOLD_SECONDS}s -> LED OFF"), led.off()))
         _pir_off_timer.daemon = True
         _pir_off_timer.start()
 
     print("[PIR_LED] PIR manager started.")
-    pir.when_motion = handle_motion
-    try: pause()
-    except: pass
-    finally: led.off(); print("[PIR_LED] PIR manager stopped.")
+    pir1.when_motion = handle_motion
+    pir2.when_motion = handle_motion
+    try:
+        pause()
+    except:
+        pass
+    finally:
+        led.off()
+        print("[PIR_LED] PIR manager stopped.")
 
 # --- HELPER HSV Function ---
 def hsv_in_range(hsv, lo, hi):
