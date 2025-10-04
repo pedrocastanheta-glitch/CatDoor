@@ -1,0 +1,180 @@
+/* static/style.css */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f0f2f5;
+    margin: 0;
+    padding: 2em;
+    color: #333;
+}
+
+.container {
+    max-width: 1280px;
+    margin: auto;
+}
+
+.card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+h1, h2, h3 {
+    color: #1c1e21;
+}
+
+p {
+    line-height: 1.6;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: -10px; /* Adjust spacing */
+}
+
+.nav-link {
+    text-decoration: none;
+    background-color: #6c757d;
+    color: white;
+    padding: 8px 15px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    transition: background-color 0.2s;
+}
+
+.nav-link:hover {
+    background-color: #5a6268;
+    text-decoration: none;
+}
+
+img {
+    max-width: 100%;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+button {
+    font-size: 1em;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: white;
+    margin-right: 10px;
+    transition: opacity 0.2s;
+}
+
+button:hover {
+    opacity: 0.9;
+}
+
+button.primary { background-color: #007bff; }
+button.secondary { background-color: #6c757d; }
+button.danger { background-color: #dc3545; }
+
+.door-control {
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    transition: all 0.3s ease;
+}
+
+.status { font-weight: bold; }
+.status.open { color: #28a745; }
+.status.close { color: #dc3545; }
+
+.door-control.manual-hold {
+    background-color: #fffbe6;
+    border-color: #ffe58f;
+}
+
+.manual-hold-text {
+    display: none;
+    color: #d46b08;
+    font-style: italic;
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+
+.manual-hold .manual-hold-text {
+    display: block;
+}
+
+/* Styles for Setup Page */
+#snapshot-wrapper { position: relative; display: inline-block; }
+.rect { border: 2px solid; position: absolute; }
+.rect-area { border-color: cyan; }
+.rect-sample { border-color: limegreen; }
+#status-message { color: #28a745; font-weight: bold; margin-top: 10px; height: 20px; }
+.area-item { background: #f9f9f9; border: 1px solid #eee; padding: 15px; border-radius: 5px; margin-bottom: 10px; }
+.profiles-section { border-top: 1px dashed #ccc; margin-top: 15px; padding-top: 15px; }
+.remove-profile-btn { background: none; border: none; color: #dc3545; font-size: 1.5em; font-weight: bold; line-height: 1; padding: 0 5px; margin-left: 10px; }
+
+/* --- Two-Column Layout --- */
+.layout-container {
+    display: flex;
+    gap: 20px; /* Space between columns */
+}
+
+.layout-left {
+    flex: 3; /* Takes up 3/5 of the space */
+    min-width: 0;
+}
+
+.layout-right {
+    flex: 2; /* Takes up 2/5 of the space */
+    min-width: 0;
+}
+
+/* On screens smaller than 900px, stack the columns vertically */
+@media (max-width: 900px) {
+    .layout-container {
+        flex-direction: column;
+    }
+}
+
+/* --- Fix for Drawing Position --- */
+#snapshot-wrapper {
+    position: relative; /* This is the crucial parent for positioning */
+    display: block;     /* Ensures it behaves predictably */
+    line-height: 0;     /* Removes extra space under the image that can cause offsets */
+}
+
+#snapshot-wrapper img {
+    /* This rule applies to the snapshot image once it's loaded */
+    width: 100%;
+    height: auto;
+}
+
+.rect {
+    /* This ensures the border is drawn inside the box, not outside */
+    box-sizing: border-box; 
+}
+
+/* --- Styles for Resizable Areas on Setup Page --- */
+.resizable-rect {
+    position: absolute;
+    border: 2px solid cyan;
+    cursor: move;
+    user-select: none; /* Prevents text selection while dragging */
+}
+
+.resizable-rect .handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background-color: cyan;
+    border: 2px solid white;
+    border-radius: 50%;
+    /* The transform makes it easier to grab the corners */
+    transform: translate(-50%, -50%); 
+}
+
+.handle.nw { top: 0;  left: 0;  cursor: nwse-resize; }
+.handle.ne { top: 0;  right: 0; cursor: nesw-resize; }
+.handle.sw { bottom: 0; left: 0;  cursor: nesw-resize; }
+.handle.se { bottom: 0; right: 0; cursor: nwse-resize; }
