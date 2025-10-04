@@ -2,20 +2,59 @@
 import cv2
 import time
 import os
-from camera import Camera # Assuming your camera.py is in the same folder
+import threading
+from camera import Camera
+from gpiozero import MotionSensor, LED
 
 # --- Configuration ---
-SAVE_PATH = "/media/pedrocastanheta/2606-4C43/cat_images"  # The folder on the USB drive to save images
-MOTION_THRESHOLD = 1000  # The number of moving pixels to trigger a capture
-CAPTURE_COOLDOWN_SEC = 3.0  # Wait at least 3 seconds between captures
+SAVE_PATH = "/media/pedrocastanheta/2606-4C43/cat_images"
+MOTION_THRESHOLD = 1000
+CAPTURE_COOLDOWN_SEC = 3.0
+
+# --- GPIO Configuration (from app.py) ---
+PIR_PIN_1 = 22  # <-- MODIFIED: First PIR sensor
+PIR_PIN_2 = 10  # <-- NEW: Second PIR sensor
+LED_PIN = 27
+LED_HOLD_SECONDS = 30
+
+# --- Global timer for the LED ---
+_pir_off_timer = None
 
 def run_collector():
     """
-    Detects motion and saves a snapshot to the specified path.
+    Detects motion and saves a snapshot, with PIR-controlled lighting.
     """
-    # Create the directory on the USB drive if it doesn't exist
     os.makedirs(SAVE_PATH, exist_ok=True)
     print(f"Ready to capture. Saving images to: {SAVE_PATH}")
+
+    # --- Initialize GPIO devices ---
+    led = None
+    try:
+        led = LED(LED_PIN)
+        pir1 = MotionSensor(PIR_PIN_1) # <-- MODIFIED: Initialize first sensor
+        pir2 = MotionSensor(PIR_PIN_2) # <-- NEW: Initialize second sensor
+        print("PIR sensors and LED initialized.")
+
+        def handle_motion():
+            """Turns on LED and sets a timer to turn it off."""
+            global _pir_off_timer
+            if not led.is_lit:
+                print("PIR Motion Detected -> LED ON")
+                led.on()
+            
+            if _pir_off_timer:
+                _pir_off_timer.cancel()
+            
+            _pir_off_timer = threading.Timer(LED_HOLD_SECONDS, lambda: (print("LED Timeout -> LED OFF"), led.off()))
+            _pir_off_timer.daemon = True
+            _pir_off_timer.start()
+
+        # Assign the same function to both PIR sensors' motion events
+        pir1.when_motion = handle_motion # <-- MODIFIED
+        pir2.when_motion = handle_motion # <-- NEW
+
+    except Exception as e:
+        print(f"Could not initialize GPIO. Lighting will be disabled. Error: {e}")
 
     # Initialize camera and background subtractor
     cam = Camera()
@@ -23,44 +62,34 @@ def run_collector():
     
     last_capture_time = 0
     
-    print("Starting motion detection... Press Ctrl+C to stop.")
+    print("Starting visual motion detection... Press Ctrl+C to stop.")
 
-    for frame in cam.frames():
-        if frame is None:
-            continue
+    try:
+        for frame in cam.frames():
+            if frame is None:
+                continue
 
-        # Create a motion mask
-        motion_mask = subtractor.apply(frame)
-        
-        # Count the number of white pixels (moving pixels)
-        motion_pixels = cv2.countNonZero(motion_mask)
+            motion_mask = subtractor.apply(frame)
+            motion_pixels = cv2.countNonZero(motion_mask)
 
-        # If motion is detected above the threshold
-        if motion_pixels > MOTION_THRESHOLD:
-            current_time = time.time()
-            
-            # Check if the cooldown period has passed
-            if (current_time - last_capture_time) > CAPTURE_COOLDOWN_SEC:
-                # Create a unique filename using a timestamp
-                timestamp = int(current_time)
-                filename = f"capture_{timestamp}.jpg"
-                full_path = os.path.join(SAVE_PATH, filename)
+            if motion_pixels > MOTION_THRESHOLD:
+                current_time = time.time()
                 
-                # Save the original color frame
-                cv2.imwrite(full_path, frame)
-                
-                print(f"Motion detected! Saved image to {full_path}")
-                
-                # Update the last capture time
-                last_capture_time = current_time
+                if (current_time - last_capture_time) > CAPTURE_COOLDOWN_SEC:
+                    timestamp = int(current_time)
+                    filename = f"capture_{timestamp}.jpg"
+                    full_path = os.path.join(SAVE_PATH, filename)
+                    
+                    cv2.imwrite(full_path, frame)
+                    
+                    print(f"Visual Motion Detected! Saved image to {full_path}")
+                    
+                    last_capture_time = current_time
+    finally:
+        if led:
+            led.off()
+            print("LED turned off during exit.")
 
-        # Optional: To see a live preview, uncomment the lines below
-        # cv2.imshow("Live Feed", frame)
-        # cv2.imshow("Motion Mask", motion_mask)
-        # if cv2.waitKey(1) & 0xFF == ord('q'):
-        #     break
-
-    # cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     try:
