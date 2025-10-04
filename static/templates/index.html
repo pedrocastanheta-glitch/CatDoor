@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat Door Controller</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <div class="header">
+            <h1>Cat Door Controller</h1>
+            <a href="/setup" class="nav-link">Go to Setup Page</a>
+        </div>
+    </div>
+
+    <div class="layout-container">
+        
+        <div class="layout-left">
+            <div class="card">
+                <h2>Live Camera</h2>
+                <img src="{{ url_for('video_feed') }}" alt="Live Camera Feed">
+            </div>
+        </div>
+
+        <div class="layout-right">
+            <div class="card">
+                <h2>System Status</h2>
+                <div>
+                    <span>Raspberry Pi Temperature: </span>
+                    <strong id="pi-temp">...</strong> &deg;C
+                </div>
+                <div style="margin-top: 8px;">
+                    <span>Door 1 Limit Switch: </span>
+                    <strong id="switch-door1-status">...</strong>
+                </div>
+                <!-- ADDED: Status for Door 2 Switch -->
+                <div style="margin-top: 8px;">
+                    <span>Door 2 Limit Switch: </span>
+                    <strong id="switch-door2-status">...</strong>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Manual Controls</h2>
+                <!-- Door 1 Controls -->
+                <div class="door-control" id="door1-control">
+                    <button class="primary" onclick="doorAction('door1', 'open')">Open Door 1</button>
+                    <button class="secondary" onclick="doorAction('door1', 'close')">Close Door 1</button>
+                    <span>Status: <strong id="door1-status" class="status">...</strong></span>
+                    <div class="manual-hold-text">Automatic detection is paused. Press "Close" to resume.</div>
+                </div>
+                <!-- Door 2 Controls -->
+                <div class="door-control" id="door2-control">
+                    <button class="primary" onclick="doorAction('door2', 'open')">Open Door 2</button>
+                    <button class="secondary" onclick="doorAction('door2', 'close')">Close Door 2</button>
+                    <span>Status: <strong id="door2-status" class="status">...</strong></span>
+                    <!-- ADDED: Manual hold text for Door 2 -->
+                    <div class="manual-hold-text">Automatic detection is paused. Press "Close" to resume.</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // The JavaScript for this page is correct and remains the same.
+    async function updateDoorStatus() { try { const response = await fetch('/api/door_status'); if (!response.ok) return; const statuses = await response.json(); for (const doorId in statuses) { const statusElement = document.getElementById(`${doorId}-status`); if (statusElement) { const statusText = statuses[doorId]; const displayText = statusText.charAt(0).toUpperCase() + statusText.slice(1); statusElement.textContent = displayText; statusElement.className = `status ${statusText}`; } } } catch (error) { console.error('Error updating door status:', error); } }
+    async function updatePiTemp() { try { const response = await fetch('/api/temp'); if (!response.ok) return; const data = await response.json(); const tempElement = document.getElementById('pi-temp'); if (tempElement && data.temp_c) { tempElement.textContent = data.temp_c; } } catch (error) { console.error('Error updating temperature:', error); } }
+    async function updateOverrideStatus() { try { const response = await fetch('/api/override_status'); if (!response.ok) return; const overrideStates = await response.json(); for (const doorId in overrideStates) { const controlDiv = document.getElementById(`${doorId}-control`); if (controlDiv) { if (overrideStates[doorId] === true) { controlDiv.classList.add('manual-hold'); } else { controlDiv.classList.remove('manual-hold'); } } } } catch (error) { console.error('Error updating override status:', error); } }
+    async function updateSwitchStatus() { try { const response = await fetch('/api/switch_status'); if (!response.ok) return; const switchStates = await response.json(); for (const doorId in switchStates) { const statusElement = document.getElementById(`switch-${doorId}-status`); if (statusElement) { const isPressed = switchStates[doorId].is_pressed; statusElement.textContent = isPressed ? "Pressed" : "Not Pressed"; statusElement.style.color = isPressed ? '#28a745' : '#dc3545'; } } } catch (error) { console.error('Error updating switch status:', error); } }
+    async function doorAction(doorId, action) { try { const statusElement = document.getElementById(`${doorId}-status`); if (statusElement) statusElement.textContent = '...'; await fetch(`/api/door/${doorId}/${action}`, { method: 'POST' }); updateDoorStatus(); updateOverrideStatus(); } catch (error) { console.error(`Failed to ${action} ${doorId}:`, error); } }
+    document.addEventListener('DOMContentLoaded', () => { updateDoorStatus(); updatePiTemp(); updateOverrideStatus(); updateSwitchStatus(); setInterval(updateDoorStatus, 3000); setInterval(updatePiTemp, 10000); setInterval(updateOverrideStatus, 3000); setInterval(updateSwitchStatus, 1000); });
+</script>
+
+</body>
+</html>
