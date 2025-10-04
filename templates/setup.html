@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat Door Setup</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <div class="header">
+            <h1>Cat Door Setup</h1>
+            <a href="/" class="nav-link">&larr; Back to Main Page</a>
+        </div>
+    </div>
+
+    <div class="layout-container">
+        <div class="layout-left">
+            <div class="card">
+                <h2>1. Live Preview & Snapshot</h2>
+                <p>Watch the live stream, then click the button to capture a static image for setup.</p>
+                <img id="video-preview" src="{{ url_for('video_feed') }}" alt="Live Camera Feed">
+                <br><br>
+                <button id="snapshot-btn" class="primary">Take Snapshot</button>
+            </div>
+            <div class="card">
+                <h2>2. Define Areas & Sample Colors</h2>
+                <p>
+                    - To create a new <strong>Detection Area</strong>, hold <strong>Shift</strong> and drag on the snapshot below.<br>
+                    - To add a <strong>Color Profile</strong>, click the area's corresponding "Add" button, then draw a small box on the snapshot.
+                </p>
+                <div id="snapshot-wrapper"></div>
+                <div id="status-message"></div>
+            </div>
+        </div>
+        <div class="layout-right">
+            <div class="card">
+                <h2>3. Saved Configuration</h2>
+                <div id="areas-container"></div>
+                <button id="save-btn" class="secondary">Save All Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Element References & State ---
+    const snapshotWrapper = document.getElementById('snapshot-wrapper');
+    const areasContainer = document.getElementById('areas-container');
+    const statusMessage = document.getElementById('status-message');
+    let snapshotImage = null;
+    let areas = [];
+    let isDrawing = false, startX, startY, currentRect = null;
+    let samplingState = { areaIndex: null, isForbidden: false };
+    
+    let videoInfo = { width: 1280, height: 720 }; // Default values
+
+    // --- Core Functions ---
+    async function loadVideoInfo() {
+        try {
+            const response = await fetch('/api/video_info');
+            videoInfo = await response.json();
+        } catch(error) {
+            console.error("Could not fetch video info, using defaults.", error);
+        }
+    }
+
+    async function stopDrawing() {
+        if (!isDrawing || !currentRect) return;
+        isDrawing = false;
+        
+        const drawnLeft = parseFloat(currentRect.style.left);
+        const drawnTop = parseFloat(currentRect.style.top);
+        const drawnWidth = parseFloat(currentRect.style.width);
+        const drawnHeight = parseFloat(currentRect.style.height);
+
+        currentRect.remove();
+        currentRect = null;
+        
+        if (drawnWidth < 5 || drawnHeight < 5) {
+            samplingState.areaIndex = null;
+            statusMessage.textContent = '';
+            return;
+        }
+
+        const displayWidth = snapshotImage.clientWidth;
+        const displayHeight = snapshotImage.clientHeight;
+        const actualWidth = videoInfo.width;
+        const actualHeight = videoInfo.height;
+
+        const scaleX = actualWidth / displayWidth;
+        const scaleY = actualHeight / displayHeight;
+        
+        const scaledRect = [
+            Math.round(drawnLeft * scaleX),
+            Math.round(drawnTop * scaleY),
+            Math.round(drawnWidth * scaleX),
+            Math.round(drawnHeight * scaleY)
+        ];
+
+        if (samplingState.areaIndex !== null) {
+            await sampleColorFromRect(scaledRect, samplingState.areaIndex, samplingState.isForbidden);
+            samplingState.areaIndex = null;
+            statusMessage.textContent = '';
+        } else {
+            const areaName = prompt('Enter a name for this new detection area:', `Area ${areas.length + 1}`);
+            if (areaName) {
+                areas.push({
+                    name: areaName, door_id: "door1", rect: scaledRect,
+                    profiles: [], forbidden_profiles: [], min_pixels: 100
+                });
+                renderAreas();
+            }
+        }
+    }
+
+    async function sampleColorFromRect(rect, areaIndex, isForbidden) {
+        statusMessage.textContent = 'Sampling...';
+        try {
+            const response = await fetch('/api/hsv_from_rect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rect: rect }) });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error);
+
+            const profileType = isForbidden ? "forbidden" : "allowed";
+            const profileName = prompt(`Enter a name for this new ${profileType} color profile:`);
+            if (profileName) {
+                const targetArrayKey = isForbidden ? "forbidden_profiles" : "profiles";
+                if (!areas[areaIndex][targetArrayKey]) areas[areaIndex][targetArrayKey] = [];
+                areas[areaIndex][targetArrayKey].push({ label: profileName, hsv_lo: data.hsv_lo, hsv_hi: data.hsv_hi });
+                renderAreas();
+            }
+        } catch (error) {
+            alert(`Failed to sample color: ${error.message}`);
+        }
+    }
+    
+    function startDrawing(e) { 
+        if (!snapshotImage || (!e.shiftKey && samplingState.areaIndex === null)) return; 
+        isDrawing = true; 
+        const rect = snapshotImage.getBoundingClientRect(); 
+        startX = e.clientX - rect.left; 
+        startY = e.clientY - rect.top; 
+        currentRect = document.createElement('div'); 
+        currentRect.className = (samplingState.areaIndex !== null) ? 'rect rect-sample' : 'rect rect-area'; 
+        currentRect.style.left = `${startX}px`; 
+        currentRect.style.top = `${startY}px`; 
+        snapshotWrapper.appendChild(currentRect); 
+    }
+    
+    function draw(e) { 
+        if (!isDrawing || !currentRect || !snapshotImage) return; 
+        const rect = snapshotImage.getBoundingClientRect(); 
+        const currentX = e.clientX - rect.left; 
+        const currentY = e.clientY - rect.top; 
+        const width = currentX - startX; 
+        const height = currentY - startY; 
+        currentRect.style.width = `${Math.abs(width)}px`; 
+        currentRect.style.height = `${Math.abs(height)}px`; 
+        currentRect.style.left = `${width > 0 ? startX : currentX}px`; 
+        currentRect.style.top = `${height > 0 ? startY : currentY}px`; 
+    }
+
+    function renderAreas() { 
+        areasContainer.innerHTML = ''; 
+        if (areas.length === 0) { 
+            areasContainer.innerHTML = '<p>No areas defined yet.</p>'; 
+            return; 
+        } 
+        areas.forEach((area, index) => { 
+            const areaElem = document.createElement('div'); 
+            areaElem.className = 'area-item'; 
+            let allowedProfilesHtml = (area.profiles || []).map((p, pIndex) => `<div style="display:flex; align-items:center;"><p style="flex-grow:1;">&nbsp;&nbsp;- ${p.label}</p><button class="remove-profile-btn" data-area-index="${index}" data-profile-index="${pIndex}" data-is-forbidden="false">&times;</button></div>`).join(''); 
+            let forbiddenProfilesHtml = (area.forbidden_profiles || []).map((p, pIndex) => `<div style="display:flex; align-items:center;"><p style="flex-grow:1;">&nbsp;&nbsp;- ${p.label}</p><button class="remove-profile-btn" data-area-index="${index}" data-profile-index="${pIndex}" data-is-forbidden="true">&times;</button></div>`).join(''); 
+            areaElem.innerHTML = `<h3>${area.name}</h3><p>Door ID: <input type="text" value="${area.door_id}" class="area-prop" data-index="${index}" data-prop="door_id"></p><p>Min Pixels: <input type="number" value="${area.min_pixels}" class="area-prop" data-index="${index}" data-prop="min_pixels"></p><button class="remove-btn danger" data-index="${index}">Remove Area</button><div class="profiles-section"><strong>Allowed Color Profiles:</strong>${allowedProfilesHtml || '<p>&nbsp;&nbsp;None</p>'}<button class="add-profile-btn primary" data-index="${index}" data-is-forbidden="false">Add Allowed Profile</button></div><div class="profiles-section"><strong>Forbidden Color Profiles:</strong>${forbiddenProfilesHtml || '<p>&nbsp;&nbsp;None</p>'}<button class="add-profile-btn danger" data-index="${index}" data-is-forbidden="true">Add Forbidden Profile</button></div>`; 
+            areasContainer.appendChild(areaElem); 
+        }); 
+    }
+    
+    async function takeSnapshot() { 
+        snapshotWrapper.innerHTML = '<p>Loading...</p>'; 
+        statusMessage.textContent = ''; 
+        samplingState.areaIndex = null; 
+        try { 
+            const response = await fetch('/api/snapshot', { method: 'POST' }); 
+            if (!response.ok) throw new Error('Snapshot failed'); 
+            const imageBlob = await response.blob(); 
+            const imageUrl = URL.createObjectURL(imageBlob); 
+            snapshotWrapper.innerHTML = ''; 
+            snapshotImage = document.createElement('img'); 
+            snapshotImage.id = 'snapshot-image'; 
+            snapshotImage.src = imageUrl; 
+            snapshotWrapper.appendChild(snapshotImage); 
+            snapshotImage.addEventListener('mousedown', startDrawing); 
+            snapshotImage.addEventListener('mousemove', draw); 
+            document.addEventListener('mouseup', stopDrawing); 
+        } catch (error) { 
+            snapshotWrapper.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`; 
+        } 
+    } 
+    
+    async function loadConfig() { 
+        try { 
+            const response = await fetch('/api/config'); 
+            const data = await response.json(); 
+            areas = data.areas || []; 
+            renderAreas(); 
+        } catch (error) { 
+            console.error('Failed to load config:', error); 
+        } 
+    } 
+    
+    async function saveConfig() { 
+        try { 
+            const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ areas: areas }) }); 
+            const result = await response.json(); 
+            if (result.ok) { 
+                alert('Configuration saved!'); 
+            } else { 
+                throw new Error(result.error || 'Unknown error'); 
+            } 
+        } catch (error) { 
+            alert(`Failed to save: ${error.message}`); 
+        } 
+    }
+
+    // --- Event Listeners ---
+    document.getElementById('snapshot-btn').addEventListener('click', takeSnapshot);
+    document.getElementById('save-btn').addEventListener('click', saveConfig);
+    
+    // Event Delegation for dynamically created elements inside areasContainer
+    areasContainer.addEventListener('change', (e) => {
+        if (e.target.classList.contains('area-prop')) {
+            const index = e.target.dataset.index;
+            const prop = e.target.dataset.prop;
+            areas[index][prop] = e.target.type === 'number' ? parseInt(e.target.value, 10) : e.target.value;
+        }
+    });
+
+    areasContainer.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.classList.contains('add-profile-btn')) {
+            samplingState.areaIndex = parseInt(target.dataset.index, 10);
+            samplingState.isForbidden = target.dataset.isForbidden === 'true';
+            const type = samplingState.isForbidden ? "forbidden" : "allowed";
+            statusMessage.textContent = `Sampling for ${type} profile for "${areas[samplingState.areaIndex].name}". Draw on snapshot.`;
+            window.scrollTo({ top: snapshotWrapper.offsetTop - 20, behavior: 'smooth' });
+        }
+        if (target.classList.contains('remove-profile-btn')) {
+            const areaIndex = target.dataset.areaIndex;
+            const profileIndex = target.dataset.profileIndex;
+            const isForbidden = target.dataset.isForbidden === 'true';
+            const targetArray = isForbidden ? areas[areaIndex].forbidden_profiles : areas[areaIndex].profiles;
+            if (confirm(`Delete profile "${targetArray[profileIndex].label}"?`)) {
+                targetArray.splice(profileIndex, 1);
+                renderAreas();
+            }
+        }
+        if (target.classList.contains('remove-btn')) {
+            const index = target.dataset.index;
+            if (confirm(`Remove area "${areas[index].name}"?`)) {
+                areas.splice(index, 1);
+                renderAreas();
+            }
+        }
+    });
+
+    // --- Initial Load ---
+    loadVideoInfo();
+    loadConfig();
+});
+</script>
+
+</body>
+</html>
