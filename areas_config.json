@@ -1,0 +1,30 @@
+{
+  "areas": [
+    {
+      "name": "Misa",
+      "door_id": "door1",
+      "rect": [
+        752,
+        268,
+        529,
+        450
+      ],
+      "profiles": [],
+      "forbidden_profiles": [],
+      "min_pixels": 100
+    },
+    {
+      "name": "Felix",
+      "door_id": "door1",
+      "rect": [
+        5,
+        288,
+        645,
+        425
+      ],
+      "profiles": [],
+      "forbidden_profiles": [],
+      "min_pixels": 100
+    }
+  ]
+}
