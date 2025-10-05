@@ -12,8 +12,8 @@ MOTION_THRESHOLD = 1000
 CAPTURE_COOLDOWN_SEC = 3.0
 
 # --- GPIO Configuration (from app.py) ---
-PIR_PIN_1 = 22  # <-- MODIFIED: First PIR sensor
-PIR_PIN_2 = 10  # <-- NEW: Second PIR sensor
+PIR_PIN_1 = 22
+PIR_PIN_2 = 10
 LED_PIN = 27
 LED_HOLD_SECONDS = 30
 
@@ -31,15 +31,17 @@ def run_collector():
     led = None
     try:
         led = LED(LED_PIN)
-        pir1 = MotionSensor(PIR_PIN_1) # <-- MODIFIED: Initialize first sensor
-        pir2 = MotionSensor(PIR_PIN_2) # <-- NEW: Initialize second sensor
+        pir1 = MotionSensor(PIR_PIN_1)
+        pir2 = MotionSensor(PIR_PIN_2)
         print("PIR sensors and LED initialized.")
 
-        def handle_motion():
+        # --- MODIFIED: The function now accepts a 'sensor_name' argument ---
+        def handle_motion(sensor_name):
             """Turns on LED and sets a timer to turn it off."""
             global _pir_off_timer
             if not led.is_lit:
-                print("PIR Motion Detected -> LED ON")
+                # --- MODIFIED: The print statement now includes the sensor name ---
+                print(f"PIR Motion Detected by {sensor_name} -> LED ON")
                 led.on()
             
             if _pir_off_timer:
@@ -49,9 +51,9 @@ def run_collector():
             _pir_off_timer.daemon = True
             _pir_off_timer.start()
 
-        # Assign the same function to both PIR sensors' motion events
-        pir1.when_motion = handle_motion # <-- MODIFIED
-        pir2.when_motion = handle_motion # <-- NEW
+        # --- MODIFIED: Use lambda to pass a unique name for each sensor ---
+        pir1.when_motion = lambda: handle_motion(f"PIR 1 (Pin {PIR_PIN_1})")
+        pir2.when_motion = lambda: handle_motion(f"PIR 2 (Pin {PIR_PIN_2})")
 
     except Exception as e:
         print(f"Could not initialize GPIO. Lighting will be disabled. Error: {e}")
