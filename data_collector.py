@@ -7,7 +7,7 @@ from camera import Camera
 from gpiozero import MotionSensor, LED
 
 # --- Configuration ---
-SAVE_PATH = "/media/pedrocastanheta/2606-4C43/cat_images"
+SAVE_PATH = '/mnt/cat_share/image.jpg'
 MOTION_THRESHOLD = 1000
 CAPTURE_COOLDOWN_SEC = 3.0
 
