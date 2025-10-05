@@ -13,7 +13,7 @@ CAPTURE_COOLDOWN_SEC = 3.0
 
 # --- GPIO Configuration (from app.py) ---
 PIR_PIN_1 = 22  # <-- MODIFIED: First PIR sensor
-# PIR_PIN_2 = 10  # <-- NEW: Second PIR sensor
+PIR_PIN_2 = 10  # <-- NEW: Second PIR sensor
 LED_PIN = 27
 LED_HOLD_SECONDS = 30
 
@@ -32,7 +32,7 @@ def run_collector():
     try:
         led = LED(LED_PIN)
         pir1 = MotionSensor(PIR_PIN_1) # <-- MODIFIED: Initialize first sensor
-        # pir2 = MotionSensor(PIR_PIN_2) # <-- NEW: Initialize second sensor
+        pir2 = MotionSensor(PIR_PIN_2) # <-- NEW: Initialize second sensor
         print("PIR sensors and LED initialized.")
 
         def handle_motion():
@@ -51,7 +51,7 @@ def run_collector():
 
         # Assign the same function to both PIR sensors' motion events
         pir1.when_motion = handle_motion # <-- MODIFIED
-        # pir2.when_motion = handle_motion # <-- NEW
+        pir2.when_motion = handle_motion # <-- NEW
 
     except Exception as e:
         print(f"Could not initialize GPIO. Lighting will be disabled. Error: {e}")
