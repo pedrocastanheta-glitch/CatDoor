@@ -63,12 +63,21 @@ def _move_angle(door_id: str, which: str, angle: int) -> None:
 def _load_state() -> dict:
     if os.path.exists(STATE_FILE):
         try:
-            with open(STATE_FILE, "r") as f: return json.load(f)
+            with open(STATE_FILE, "r") as f: 
+                data = json.load(f)
+                # Handle both old and new format
+                if isinstance(list(data.values())[0], dict):
+                    # New format: {"door1": {"state": "open", "last_mode": "manual"}}
+                    return {k: v.get("state", "close") for k, v in data.items()}
+                else:
+                    # Old format: {"door1": "open"}
+                    return data
         except Exception: pass
     return {k: "close" for k in DOORS.keys()}
 
 def _save_state(state: dict) -> None:
-    with open(STATE_FILE, "w") as f: json.dump(state, f)
+    # Don't save - let app.py handle state management
+    pass
 
 _state = _load_state()
 
@@ -90,8 +99,8 @@ def open_door(door_id: str) -> None:
     
     time.sleep(1.0)
     _state[door_id] = "open"
-    _save_state(_state)
-    threading.Timer(3.0, disable_servos, args=[door_id]).start()
+    # Don't save state here - let app.py manage it
+    threading.Timer(1.0, disable_servos, args=[door_id]).start()
 
 def close_door(door_id: str) -> bool:
     MAX_CLOSE_ATTEMPTS = 5
@@ -130,8 +139,9 @@ def close_door(door_id: str) -> bool:
             _move_angle(door_id, "latch2", cfg["close_seq"]["latch2"])
             time.sleep(1.0)
             
-            _state[door_id] = "close"; _save_state(_state)
-            threading.Timer(3.0, disable_servos, args=[door_id]).start()
+            _state[door_id] = "close"
+            # Don't save state here - let app.py manage it
+            threading.Timer(1.0, disable_servos, args=[door_id]).start()
             return True
 
         print(f"[!!ERROR!!] Door '{door_id}' failed to shut on attempt {attempt + 1}. Latches not engaged.")
@@ -141,7 +151,7 @@ def close_door(door_id: str) -> bool:
             time.sleep(2.0)
         
     print(f"[SERVO] All {MAX_CLOSE_ATTEMPTS} attempts to close '{door_id}' failed.")
-    threading.Timer(3.0, disable_servos, args=[door_id]).start()
+    threading.Timer(1.0, disable_servos, args=[door_id]).start()
     return False
 
 # --- Status Functions ---

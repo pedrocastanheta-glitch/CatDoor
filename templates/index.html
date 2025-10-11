@@ -11,8 +11,13 @@
 <div class="container">
     <div class="card">
         <div class="header">
-            <h1>Cat Door Controller</h1>
-            <a href="/setup" class="nav-link">Go to Setup Page</a>
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <h1 style="margin: 0;">Cat Door Controller</h1>
+                    <button class="nav-link" onclick="location.reload()">Refresh</button>
+                </div>
+                <a href="/setup" class="nav-link">Go to Setup Page</a>
+            </div>
         </div>
     </div>
 
@@ -41,6 +46,14 @@
                     <span>Door 2 Limit Switch: </span>
                     <strong id="switch-door2-status">...</strong>
                 </div>
+                <div style="margin-top: 8px;">
+                    <span>PIR 1 Motion: </span>
+                    <strong id="pir1-status">No</strong>
+                </div>
+                <div style="margin-top: 8px;">
+                    <span>PIR 2 Motion: </span>
+                    <strong id="pir2-status">No</strong>
+                </div>
             </div>
             <div class="card">
                 <h2>Manual Controls</h2>
@@ -67,12 +80,58 @@
 
 <script>
     // The JavaScript for this page is correct and remains the same.
-    async function updateDoorStatus() { try { const response = await fetch('/api/door_status'); if (!response.ok) return; const statuses = await response.json(); for (const doorId in statuses) { const statusElement = document.getElementById(`${doorId}-status`); if (statusElement) { const statusText = statuses[doorId]; const displayText = statusText.charAt(0).toUpperCase() + statusText.slice(1); statusElement.textContent = displayText; statusElement.className = `status ${statusText}`; } } } catch (error) { console.error('Error updating door status:', error); } }
+    async function updateDoorStatus() {
+        try {
+            const response = await fetch('/api/door_status');
+            if (!response.ok) return;
+            const statuses = await response.json();
+            for (const doorId in statuses) {
+                const statusElement = document.getElementById(`${doorId}-status`);
+                const controlDiv = document.getElementById(`${doorId}-control`);
+                if (statusElement && statuses[doorId]) {
+                    const state = statuses[doorId].state;
+                    const lastMode = statuses[doorId].last_mode;
+                    statusElement.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+                    statusElement.className = `status ${state}`;
+                    // Show/hide the manual-hold message based on last_mode
+                    if (controlDiv) {
+                        const manualText = controlDiv.querySelector('.manual-hold-text');
+                        if (manualText) {
+                            manualText.style.display = (lastMode === 'manual' || lastMode === 'startup') ? 'block' : 'none';
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error updating door status:', error);
+        }
+    }
     async function updatePiTemp() { try { const response = await fetch('/api/temp'); if (!response.ok) return; const data = await response.json(); const tempElement = document.getElementById('pi-temp'); if (tempElement && data.temp_c) { tempElement.textContent = data.temp_c; } } catch (error) { console.error('Error updating temperature:', error); } }
     async function updateOverrideStatus() { try { const response = await fetch('/api/override_status'); if (!response.ok) return; const overrideStates = await response.json(); for (const doorId in overrideStates) { const controlDiv = document.getElementById(`${doorId}-control`); if (controlDiv) { if (overrideStates[doorId] === true) { controlDiv.classList.add('manual-hold'); } else { controlDiv.classList.remove('manual-hold'); } } } } catch (error) { console.error('Error updating override status:', error); } }
     async function updateSwitchStatus() { try { const response = await fetch('/api/switch_status'); if (!response.ok) return; const switchStates = await response.json(); for (const doorId in switchStates) { const statusElement = document.getElementById(`switch-${doorId}-status`); if (statusElement) { const isPressed = switchStates[doorId].is_pressed; statusElement.textContent = isPressed ? "Pressed" : "Not Pressed"; statusElement.style.color = isPressed ? '#28a745' : '#dc3545'; } } } catch (error) { console.error('Error updating switch status:', error); } }
+    async function updatePirStatus() { 
+        try { 
+            const response = await fetch('/api/pir_status'); 
+            if (!response.ok) return; 
+            const pirData = await response.json(); 
+            
+            const pir1Element = document.getElementById('pir1-status'); 
+            const pir2Element = document.getElementById('pir2-status'); 
+            
+            if (pir1Element) { 
+                pir1Element.textContent = pirData.PIR1.status; 
+                pir1Element.style.color = pirData.PIR1.active ? '#28a745' : '#dc3545'; 
+            } 
+            if (pir2Element) { 
+                pir2Element.textContent = pirData.PIR2.status; 
+                pir2Element.style.color = pirData.PIR2.active ? '#28a745' : '#dc3545'; 
+            } 
+        } catch (error) { 
+            console.error('Error updating PIR status:', error); 
+        } 
+    }
     async function doorAction(doorId, action) { try { const statusElement = document.getElementById(`${doorId}-status`); if (statusElement) statusElement.textContent = '...'; await fetch(`/api/door/${doorId}/${action}`, { method: 'POST' }); updateDoorStatus(); updateOverrideStatus(); } catch (error) { console.error(`Failed to ${action} ${doorId}:`, error); } }
-    document.addEventListener('DOMContentLoaded', () => { updateDoorStatus(); updatePiTemp(); updateOverrideStatus(); updateSwitchStatus(); setInterval(updateDoorStatus, 3000); setInterval(updatePiTemp, 10000); setInterval(updateOverrideStatus, 3000); setInterval(updateSwitchStatus, 1000); });
+    document.addEventListener('DOMContentLoaded', () => { updateDoorStatus(); updatePiTemp(); updateOverrideStatus(); updateSwitchStatus(); updatePirStatus(); setInterval(updateDoorStatus, 3000); setInterval(updatePiTemp, 10000); setInterval(updateOverrideStatus, 3000); setInterval(updateSwitchStatus, 1000); setInterval(updatePirStatus, 500); });
 </script>
 
 </body>

@@ -1,1 +1,1 @@
-{"door1": "open", "door2": "close"}
+{"door1": {"state": "open", "last_mode": "manual"}, "door2": {"state": "open", "last_mode": "manual"}}
