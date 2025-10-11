@@ -80,10 +80,55 @@ def _save_state(state: dict) -> None:
     pass
 
 _state = _load_state()
+_active_operations = {}  # Track ongoing operations: {door_id: {"operation": "opening/closing", "thread": thread_obj, "cancel_flag": threading.Event(), "current_angle": int}}
+
+# --- Helper Functions ---
+def cancel_active_operation(door_id: str) -> int:
+    """Cancel any active operation for the specified door. Returns current angle if available."""
+    if door_id in _active_operations:
+        operation_info = _active_operations[door_id]
+        operation_info["cancel_flag"].set()  # Signal cancellation
+        current_angle = operation_info.get("current_angle", None)
+        print(f"[SERVO] Cancelling active {operation_info['operation']} operation for {door_id} at angle {current_angle}")
+        return current_angle
+    return None
+
+def register_operation(door_id: str, operation: str, thread_obj: threading.Thread, cancel_flag: threading.Event):
+    """Register an active operation for tracking."""
+    _active_operations[door_id] = {
+        "operation": operation,
+        "thread": thread_obj, 
+        "cancel_flag": cancel_flag,
+        "current_angle": None
+    }
+
+def update_current_angle(door_id: str, angle: int):
+    """Update the current angle for an active operation."""
+    if door_id in _active_operations:
+        _active_operations[door_id]["current_angle"] = angle
+
+def unregister_operation(door_id: str):
+    """Remove operation from active tracking."""
+    if door_id in _active_operations:
+        del _active_operations[door_id]
 
 # --- Core Door Functions ---
-def open_door(door_id: str) -> None:
+def open_door(door_id: str, cancel_flag: threading.Event = None) -> None:
+    """Open door with optional cancellation support."""
+    if cancel_flag is None:
+        cancel_flag = threading.Event()
+    
     cfg = DOORS[door_id]
+    
+    # Check for cancellation before starting
+    if cancel_flag.is_set():
+        print(f"[SERVO] Open operation for {door_id} cancelled before starting")
+        return
+    
+    # Update state immediately to "opening"
+    _state[door_id] = "opening"
+    print(f"[SERVO] Door {door_id} state set to 'opening'")
+    
     _move_angle(door_id, "latch1", cfg["open_seq"]["latch1"])
     _move_angle(door_id, "latch2", cfg["open_seq"]["latch2"])
     time.sleep(0.5)
@@ -94,30 +139,69 @@ def open_door(door_id: str) -> None:
     
     print(f"[SERVO] Opening {door_id} slowly...")
     for angle in range(start_angle, end_angle + step, step):
+        if cancel_flag.is_set():
+            print(f"[SERVO] Open operation for {door_id} cancelled at angle {angle}")
+            unregister_operation(door_id)
+            return
         _move_angle(door_id, "door", angle)
+        update_current_angle(door_id, angle)  # Track current position
         time.sleep(0.03)
     
     time.sleep(1.0)
     _state[door_id] = "open"
+    print(f"[SERVO] Door {door_id} state set to 'open'")
     # Don't save state here - let app.py manage it
     threading.Timer(1.0, disable_servos, args=[door_id]).start()
+    unregister_operation(door_id)
 
-def close_door(door_id: str) -> bool:
+def close_door(door_id: str, cancel_flag: threading.Event = None, from_angle: int = None) -> bool:
+    """Close door with optional cancellation support and custom start angle."""
+    if cancel_flag is None:
+        cancel_flag = threading.Event()
+    
+    # Update state immediately to "closing"
+    _state[door_id] = "closing"
+    print(f"[SERVO] Door {door_id} state set to 'closing'")
+    
     MAX_CLOSE_ATTEMPTS = 5
     for attempt in range(MAX_CLOSE_ATTEMPTS):
         cfg = DOORS[door_id]
         
-        start_angle = cfg["open_seq"]["door"]
+        # Use custom start angle if provided, otherwise use normal sequence
+        if from_angle is not None:
+            start_angle = from_angle
+        else:
+            start_angle = cfg["open_seq"]["door"]
+            
         end_angle = cfg["close_seq"]["door"]
         halfway_angle = int((start_angle + end_angle) / 2)
         fast_delay = 0.02; slow_delay = 0.04
         step = -1 if start_angle > end_angle else 1
         
+        # Check for cancellation before starting
+        if cancel_flag.is_set():
+            print(f"[SERVO] Close operation for {door_id} cancelled before starting")
+            unregister_operation(door_id)
+            return False
+        
         print(f"[SERVO] Closing {door_id} door (Attempt {attempt + 1})...")
         for angle in range(start_angle, halfway_angle, step):
-            _move_angle(door_id, "door", angle); time.sleep(fast_delay)
+            if cancel_flag.is_set():
+                print(f"[SERVO] Close operation for {door_id} cancelled at angle {angle}")
+                unregister_operation(door_id)
+                return False
+            _move_angle(door_id, "door", angle)
+            update_current_angle(door_id, angle)  # Track current position
+            time.sleep(fast_delay)
+            
         for angle in range(halfway_angle, end_angle + step, step):
-            _move_angle(door_id, "door", angle); time.sleep(slow_delay)
+            if cancel_flag.is_set():
+                print(f"[SERVO] Close operation for {door_id} cancelled at angle {angle}")
+                unregister_operation(door_id)
+                return False
+            _move_angle(door_id, "door", angle)
+            update_current_angle(door_id, angle)  # Track current position
+            time.sleep(slow_delay)
         
         time.sleep(1.0)
 
@@ -140,8 +224,10 @@ def close_door(door_id: str) -> bool:
             time.sleep(1.0)
             
             _state[door_id] = "close"
+            print(f"[SERVO] Door {door_id} state set to 'close'")
             # Don't save state here - let app.py manage it
             threading.Timer(1.0, disable_servos, args=[door_id]).start()
+            unregister_operation(door_id)
             return True
 
         print(f"[!!ERROR!!] Door '{door_id}' failed to shut on attempt {attempt + 1}. Latches not engaged.")
@@ -152,7 +238,76 @@ def close_door(door_id: str) -> bool:
         
     print(f"[SERVO] All {MAX_CLOSE_ATTEMPTS} attempts to close '{door_id}' failed.")
     threading.Timer(1.0, disable_servos, args=[door_id]).start()
+    unregister_operation(door_id)
     return False
+
+# --- High-Level Door Control with Interruption ---
+def request_door_action(door_id: str, action: str) -> bool:
+    """
+    Request a door action with intelligent handling of ongoing operations.
+    Returns True if action was initiated, False if ignored (same operation already running).
+    """
+    current_operation = _active_operations.get(door_id, {}).get("operation")
+    
+    # If same operation is already running, ignore the request
+    if current_operation == action + "ing":  # "opening" or "closing"
+        print(f"[SERVO] Ignoring {action} request for {door_id} - already {current_operation}")
+        return False
+    
+    # If different operation is running, cancel it and start reversal from current position
+    current_angle = None
+    if current_operation:
+        print(f"[SERVO] Cancelling {current_operation} and starting {action} for {door_id}")
+        current_angle = cancel_active_operation(door_id)
+        time.sleep(0.2)  # Brief pause to let cancellation take effect
+    
+    # Start the new operation in a separate thread
+    cancel_flag = threading.Event()
+    
+    if action == "open":
+        def worker():
+            # If we have a current angle from cancelled operation, start from there
+            if current_angle is not None and current_operation == "closing":
+                print(f"[SERVO] Starting open from angle {current_angle} (reversed from close)")
+                # For opening from mid-close, we can start directly from current position
+                cfg = DOORS[door_id]
+                _state[door_id] = "opening"
+                end_angle = cfg["open_seq"]["door"]
+                step = 1 if current_angle < end_angle else -1
+                
+                for angle in range(current_angle, end_angle + step, step):
+                    if cancel_flag.is_set():
+                        unregister_operation(door_id)
+                        return
+                    _move_angle(door_id, "door", angle)
+                    update_current_angle(door_id, angle)
+                    time.sleep(0.03)
+                
+                _state[door_id] = "open"
+                threading.Timer(1.0, disable_servos, args=[door_id]).start()
+                unregister_operation(door_id)
+            else:
+                open_door(door_id, cancel_flag)
+        operation_name = "opening"
+    elif action == "close":
+        def worker():
+            # If we have a current angle from cancelled operation, start from there
+            if current_angle is not None and current_operation == "opening":
+                print(f"[SERVO] Starting close from angle {current_angle} (reversed from open)")
+                close_door(door_id, cancel_flag, from_angle=current_angle)
+            else:
+                close_door(door_id, cancel_flag)
+        operation_name = "closing"
+    else:
+        print(f"[SERVO] Invalid action: {action}")
+        return False
+    
+    thread = threading.Thread(target=worker, daemon=True)
+    register_operation(door_id, operation_name, thread, cancel_flag)
+    thread.start()
+    
+    print(f"[SERVO] Started {operation_name} operation for {door_id}")
+    return True
 
 # --- Status Functions ---
 def get_door_status(door_id: str) -> str:

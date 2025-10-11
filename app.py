@@ -380,6 +380,11 @@ def api_temp():
 @app.route("/api/door_status")
 def api_door_status():
     with _state_lock:
+        # Sync states from servo control module
+        for door_id in servo.DOORS:
+            servo_state = servo.get_door_status(door_id)
+            if door_id in _door_state:
+                _door_state[door_id]["state"] = servo_state
         return jsonify(_door_state)
 
 @app.route("/api/override_status")
@@ -403,16 +408,45 @@ def api_config():
 def api_door(door_id, action):
     global _manual_override
     if door_id not in servo.DOORS: return jsonify({"ok": False, "error": f"Unknown door {door_id}"}), 400
+    
     with _config_lock:
+        # Check current door state
+        current_state = _door_state[door_id]["state"]
+        
         if action == "open":
-            threaded_door_action("open", door_id, "manual")
-            _manual_override[door_id] = True
-            print(f"[MANUAL] Door '{door_id}' is now in manual hold mode.")
+            if current_state == "open":
+                print(f"[MANUAL] Door '{door_id}' is already open. No action needed.")
+                return jsonify({"ok": True, "status": current_state, "message": "Door already open"})
+            
+            # Use the new request_door_action function for intelligent operation handling
+            if servo.request_door_action(door_id, "open"):
+                _manual_override[door_id] = True
+                # Update mode in door state
+                _door_state[door_id]["last_mode"] = "manual"
+                print(f"[MANUAL] Door '{door_id}' is now in manual hold mode.")
+            else:
+                print(f"[MANUAL] Open request for '{door_id}' ignored - already opening.")
+            
         elif action == "close":
-            threaded_door_action("close", door_id, "automatic")
-            _manual_override[door_id] = False
-            print(f"[MANUAL] Door '{door_id}' has resumed automatic mode.")
-        else: return jsonify({"ok": False, "error": "action must be open|close"}), 400
+            if current_state == "close":
+                print(f"[MANUAL] Door '{door_id}' is already closed. No action needed.")
+                return jsonify({"ok": True, "status": current_state, "message": "Door already closed"})
+            
+            # Use the new request_door_action function for intelligent operation handling
+            if servo.request_door_action(door_id, "close"):
+                _manual_override[door_id] = False
+                # Update mode in door state  
+                _door_state[door_id]["last_mode"] = "automatic"
+                print(f"[MANUAL] Door '{door_id}' has resumed automatic mode.")
+            else:
+                print(f"[MANUAL] Close request for '{door_id}' ignored - already closing.")
+            
+        else: 
+            return jsonify({"ok": False, "error": "action must be open|close"}), 400
+        
+        # Save the updated state
+        save_door_state()
+            
     return jsonify({"ok": True, "status": servo.get_door_status(door_id)})
 
 @app.route("/api/snapshot", methods=["POST"])
