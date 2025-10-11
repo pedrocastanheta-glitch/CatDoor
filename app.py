@@ -16,9 +16,9 @@ OPEN_COOLDOWN_SEC = 4.0
 CLOSE_DELAY_SEC = 5.0
 
 # --- PIR LED constants ---
-PIR_PIN = 27      # Sensor 1 GPIO
-PIR2_PIN = 10     # Sensor 2 GPIO
-LED_PIN = 22      # LED GPIO (choose a free pin, not 27 or 10)
+PIR_PIN_1 = 22
+PIR_PIN_2 = 10
+LED_PIN = 27
 LED_HOLD_SECONDS = 30
 
 # --- Flask & Camera ---
@@ -135,6 +135,16 @@ def gen_frames():
             continue
         yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n")
 
+# --- Door action threading helper ---
+def threaded_door_action(action, door_id):
+    def worker():
+        if action == "open":
+            servo.open_door(door_id)
+        elif action == "close":
+            servo.close_door(door_id)
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+
 # --- CORE DETECTION LOGIC ---
 def detection_loop():
     global config, _last_open_ts, _last_detection_ts, _manual_override
@@ -159,7 +169,6 @@ def detection_loop():
                 if _manual_override.get(door_id, False):
                     door_detection_states[door_id]["manual"] = True
                     continue
-            
             rect = area.get("rect", [0, 0, 0, 0]); x, y, w, h = [int(v) for v in rect]
             min_pixels = int(area.get("min_pixels", 50))
             if w <= 0 or h <= 0: continue
@@ -171,7 +180,7 @@ def detection_loop():
                     mask = hsv_in_range(sub_hsv, p.get("hsv_lo"), p.get("hsv_hi"))
                     if cv2.countNonZero(mask) >= min_pixels:
                         door_detection_states[door_id]["allowed"] = True; break
-            
+
             if not door_detection_states[door_id]["forbidden"]:
                 for p in area.get("forbidden_profiles", []):
                     mask = hsv_in_range(sub_hsv, p.get("hsv_lo"), p.get("hsv_hi"))
@@ -183,25 +192,25 @@ def detection_loop():
 
             is_allowed = state["allowed"]
             is_forbidden = state["forbidden"]
-            
+
             if is_forbidden and not is_allowed:
                 if servo.get_door_status(door_id) == "open":
                     print(f"[DETECT] Door '{door_id}' FORBIDDEN match -> close NOW")
-                    servo.close_door(door_id)
+                    threaded_door_action("close", door_id)
                     _last_detection_ts.pop(door_id, None)
             elif is_allowed:
                 last_open = _last_open_ts.get(door_id, 0)
                 if now - last_open >= OPEN_COOLDOWN_SEC:
                     if servo.get_door_status(door_id) == "close":
                         print(f"[DETECT] Door '{door_id}' allowed match -> open")
-                        servo.open_door(door_id)
+                        threaded_door_action("open", door_id)
                         _last_open_ts[door_id] = now
                 _last_detection_ts[door_id] = now
-            else: 
+            else:
                 last_seen = _last_detection_ts.get(door_id, 0)
                 if servo.get_door_status(door_id) == "open" and now - last_seen > CLOSE_DELAY_SEC:
                     print(f"[DETECT] Door '{door_id}' not seen for {CLOSE_DELAY_SEC}s -> close")
-                    servo.close_door(door_id)
+                    threaded_door_action("close", door_id)
                     _last_detection_ts.pop(door_id, None)
                     _last_open_ts.pop(door_id, None)
 
@@ -209,32 +218,36 @@ def detection_loop():
 def pir_led_manager():
     global _pir_off_timer
     try:
-        pir1 = MotionSensor(PIR_PIN)
-        pir2 = MotionSensor(PIR2_PIN)
         led = LED(LED_PIN)
+        pir1 = MotionSensor(PIR_PIN_1)
+        pir2 = MotionSensor(PIR_PIN_2)
+        print("PIR sensors and LED initialized.")
+
+        def handle_motion(sensor_name):
+            global _pir_off_timer
+            if not led.is_lit:
+                print(f"PIR Motion Detected by {sensor_name} -> LED ON")
+                led.on()
+            if _pir_off_timer:
+                _pir_off_timer.cancel()
+            _pir_off_timer = threading.Timer(LED_HOLD_SECONDS, lambda: (print("LED Timeout -> LED OFF"), led.off()))
+            _pir_off_timer.daemon = True
+            _pir_off_timer.start()
+
+        pir1.when_motion = lambda: handle_motion(f"PIR 1 (Pin {PIR_PIN_1})")
+        pir2.when_motion = lambda: handle_motion(f"PIR 2 (Pin {PIR_PIN_2})")
+
     except Exception as e:
         print(f"[PIR_LED] Failed to initialize GPIO: {e}. Feature disabled."); return
 
-    def handle_motion():
-        global _pir_off_timer
-        if not led.is_lit:
-            print("[PIR_LED] Motion detected (any PIR) -> LED ON")
-            led.on()
-        if _pir_off_timer:
-            _pir_off_timer.cancel()
-        _pir_off_timer = threading.Timer(LED_HOLD_SECONDS, lambda: (print(f"[PIR_LED] No motion for {LED_HOLD_SECONDS}s -> LED OFF"), led.off()))
-        _pir_off_timer.daemon = True
-        _pir_off_timer.start()
-
     print("[PIR_LED] PIR manager started.")
-    pir1.when_motion = handle_motion
-    pir2.when_motion = handle_motion
     try:
         pause()
     except:
         pass
     finally:
-        led.off()
+        if 'led' in locals():
+            led.off()
         print("[PIR_LED] PIR manager stopped.")
 
 # --- HELPER HSV Function ---
@@ -291,11 +304,11 @@ def api_door(door_id, action):
     if door_id not in servo.DOORS: return jsonify({"ok": False, "error": f"Unknown door {door_id}"}), 400
     with _config_lock:
         if action == "open":
-            servo.open_door(door_id)
+            threaded_door_action("open", door_id)
             _manual_override[door_id] = True
             print(f"[MANUAL] Door '{door_id}' is now in manual hold mode.")
         elif action == "close":
-            servo.close_door(door_id)
+            threaded_door_action("close", door_id)
             _manual_override[door_id] = False
             print(f"[MANUAL] Door '{door_id}' has resumed automatic mode.")
         else: return jsonify({"ok": False, "error": "action must be open|close"}), 400
