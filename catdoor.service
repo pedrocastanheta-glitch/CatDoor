@@ -1,0 +1,27 @@
+[Unit]
+Description=Cat Door Controller with AI Detection
+After=network.target
+
+[Service]
+Type=simple
+User=pedrocastanheta
+WorkingDirectory=/home/pedrocastanheta/catdoor
+Environment="PATH=/home/pedrocastanheta/hailo-rpi5-examples/venv_hailo_rpi_examples/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="VIRTUAL_ENV=/home/pedrocastanheta/hailo-rpi5-examples/venv_hailo_rpi_examples"
+Environment="LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/hailo"
+
+# Start the application
+ExecStart=/home/pedrocastanheta/hailo-rpi5-examples/venv_hailo_rpi_examples/bin/python3 /home/pedrocastanheta/catdoor/app.py
+
+# Restart settings
+Restart=always
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -26,3 +26,125 @@ h2{margin:8px 0 6px}
 small{color:var(--muted)}
 .hint{color:var(--muted)}
 select{background:#0c131a;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+
+/* Enhanced Cat Configuration Styles */
+.cat-config-section {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.detection-method-section {
+    background: #0a1015;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+}
+
+.detection-method-section label {
+    display: block;
+    margin: 5px 0;
+    cursor: pointer;
+}
+
+.size-config-section, .color-config-section {
+    background: #0d1520;
+    border: 1px solid #2a3441;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+}
+
+.size-config-section h4, .color-config-section h4 {
+    margin: 0 0 10px 0;
+    color: var(--accent);
+}
+
+.size-presets {
+    margin: 10px 0;
+}
+
+.preset-btn {
+    background: #1a2332;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 2px 4px;
+    font-size: 12px;
+}
+
+.preset-btn:hover {
+    background: #2a3441;
+    border-color: var(--accent);
+}
+
+.area-item {
+    background: var(--card);
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.area-item h3 {
+    margin: 0 0 15px 0;
+    color: var(--accent2);
+    font-size: 16px;
+}
+
+.area-prop {
+    background: #0c131a;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin: 2px 4px;
+}
+
+.remove-btn {
+    background: #dc2626;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+.remove-btn:hover {
+    background: #ef4444;
+}
+
+.setup-instructions {
+    background: #0a1015;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.setup-instructions h3 {
+    margin: 0 0 10px 0;
+    color: var(--accent2);
+}
+
+.setup-instructions ol {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.setup-instructions li {
+    margin: 5px 0;
+    line-height: 1.5;
+}
+
+.setup-instructions p {
+    margin: 10px 0 0 0;
+    color: var(--accent);
+    font-weight: 500;
+}
