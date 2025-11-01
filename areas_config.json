@@ -9,6 +9,11 @@
         529,
         450
       ],
+      "detection_method": "size_based",
+      "size_threshold_min": 8000,
+      "size_threshold_max": 15000,
+      "min_contour_area": 500,
+      "motion_sensitivity": 20,
       "profiles": [],
       "forbidden_profiles": [],
       "min_pixels": 100
@@ -22,6 +27,11 @@
         645,
         425
       ],
+      "detection_method": "size_based",
+      "size_threshold_min": 15000,
+      "size_threshold_max": 30000,
+      "min_contour_area": 500,
+      "motion_sensitivity": 20,
       "profiles": [],
       "forbidden_profiles": [],
       "min_pixels": 100
