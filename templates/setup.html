@@ -5,14 +5,101 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cat Door Setup</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+    /* Area overlay styles */
+    .area-overlay {
+        position: absolute;
+        border: 2px solid #00ff00;
+        background: rgba(0, 255, 0, 0.1);
+        cursor: move;
+        pointer-events: auto;
+        z-index: 10;
+        box-sizing: border-box;
+    }
+    
+    .area-overlay:hover {
+        border-color: #ffff00;
+        background: rgba(255, 255, 0, 0.15);
+    }
+    
+    .area-overlay.dragging {
+        border-color: #ff0000;
+        background: rgba(255, 0, 0, 0.2);
+    }
+    
+    .area-label {
+        position: absolute;
+        top: -25px;
+        left: 0;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 2px 6px;
+        font-size: 12px;
+        border-radius: 3px;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+    
+    /* Resize handles */
+    .resize-handle {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: #ffff00;
+        border: 1px solid #000;
+        opacity: 0;
+        transition: opacity 0.2s;
+        z-index: 20;
+    }
+    
+    .area-overlay:hover .resize-handle {
+        opacity: 1;
+    }
+    
+    .resize-handle.nw { top: -5px; left: -5px; cursor: nw-resize; }
+    .resize-handle.ne { top: -5px; right: -5px; cursor: ne-resize; }
+    .resize-handle.sw { bottom: -5px; left: -5px; cursor: sw-resize; }
+    .resize-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
+    
+    /* Snapshot wrapper positioning */
+    #snapshot-wrapper {
+        position: relative;
+        display: inline-block;
+    }
+    
+    #snapshot-image {
+        display: block;
+        max-width: 100%;
+        height: auto;
+    }
+    </style>
 </head>
 <body>
 
 <div class="container">
     <div class="card">
         <div class="header">
-            <h1>Cat Door Setup</h1>
+            <h1>🔧 Cat Door Setup</h1>
             <a href="/" class="nav-link">&larr; Back to Main Page</a>
+        </div>
+        <div class="setup-instructions">
+            <h3>📋 Quick Setup Guide for Raspberry Pi 5 with Hailo AI</h3>
+            <ol>
+                <li><strong>Take a snapshot</strong> of the camera view showing the areas where cats approach</li>
+                <li><strong>Draw detection areas</strong> by holding Shift and dragging rectangles around each cat's door area</li>
+                <li><strong>Move existing areas</strong> by clicking and dragging them to new positions</li>
+                <li><strong>Resize areas</strong> by dragging the corner handles that appear when you hover over an area</li>
+                <li><strong>Configure each cat:</strong>
+                    <ul>
+                        <li>Enter cat name (e.g., "Misa", "Felix")</li>
+                        <li>Select door ID (door1 or door2)</li>
+                        <li>Choose expected cat color type: Orange (lighter/ginger cats), Black (darker cats), or Any (no filtering)</li>
+                    </ul>
+                </li>
+                <li><strong>Save and test</strong> - the Hailo AI will detect cats and verify their color before opening doors</li>
+            </ol>
+            <p><strong>💡 How it works:</strong> The Hailo-8L AI accelerator runs YOLOv6n to detect cats at ~15 FPS, then verifies the cat's color matches your configuration before allowing door access.</p>
+            <p><strong>⚡ Hardware Acceleration:</strong> Processing is hardware-accelerated with negligible CPU usage, allowing smooth video streaming and responsive detection.</p>
         </div>
     </div>
 
@@ -26,10 +113,12 @@
                 <button id="snapshot-btn" class="primary">Take Snapshot</button>
             </div>
             <div class="card">
-                <h2>2. Define Areas & Sample Colors</h2>
+                <h2>2. Define Detection Areas & Configure Cats</h2>
                 <p>
                     - To create a new <strong>Detection Area</strong>, hold <strong>Shift</strong> and drag on the snapshot below.<br>
-                    - To add a <strong>Color Profile</strong>, click the area's corresponding "Add" button, then draw a small box on the snapshot.
+                    - To <strong>move an existing area</strong>, click and drag it to a new position.<br>
+                    - <strong>⚡ Hailo AI Detection</strong> automatically identifies cats and verifies their color at ~15 FPS using hardware acceleration.<br>
+                    - Select the <strong>Expected Cat Color Type</strong> (Orange/Black/Any) for each area to ensure only the correct cat can open the door.
                 </p>
                 <div id="snapshot-wrapper"></div>
                 <div id="status-message"></div>
@@ -106,13 +195,20 @@ document.addEventListener('DOMContentLoaded', () => {
             samplingState.areaIndex = null;
             statusMessage.textContent = '';
         } else {
-            const areaName = prompt('Enter a name for this new detection area:', `Area ${areas.length + 1}`);
+            const areaName = prompt('Enter a name for this new detection area (cat name):', `Cat ${areas.length + 1}`);
             if (areaName) {
-                areas.push({
-                    name: areaName, door_id: "door1", rect: scaledRect,
-                    profiles: [], forbidden_profiles: [], min_pixels: 100
-                });
+                // Create new area with Hailo AI detection defaults
+                const newArea = {
+                    name: areaName, 
+                    door_id: "door1", 
+                    rect: scaledRect,
+                    expected_color: "any"  // Default to any cat
+                };
+                areas.push(newArea);
                 renderAreas();
+                statusMessage.textContent = `Created new detection area for ${areaName}. Configure cat color type below.`;
+                statusMessage.style.color = 'green';
+                setTimeout(() => { statusMessage.textContent = ''; }, 5000);
             }
         }
     }
@@ -172,11 +268,332 @@ document.addEventListener('DOMContentLoaded', () => {
         areas.forEach((area, index) => { 
             const areaElem = document.createElement('div'); 
             areaElem.className = 'area-item'; 
-            let allowedProfilesHtml = (area.profiles || []).map((p, pIndex) => `<div style="display:flex; align-items:center;"><p style="flex-grow:1;">&nbsp;&nbsp;- ${p.label}</p><button class="remove-profile-btn" data-area-index="${index}" data-profile-index="${pIndex}" data-is-forbidden="false">&times;</button></div>`).join(''); 
-            let forbiddenProfilesHtml = (area.forbidden_profiles || []).map((p, pIndex) => `<div style="display:flex; align-items:center;"><p style="flex-grow:1;">&nbsp;&nbsp;- ${p.label}</p><button class="remove-profile-btn" data-area-index="${index}" data-profile-index="${pIndex}" data-is-forbidden="true">&times;</button></div>`).join(''); 
-            areaElem.innerHTML = `<h3>${area.name}</h3><p>Door ID: <input type="text" value="${area.door_id}" class="area-prop" data-index="${index}" data-prop="door_id"></p><p>Min Pixels: <input type="number" value="${area.min_pixels}" class="area-prop" data-index="${index}" data-prop="min_pixels"></p><button class="remove-btn danger" data-index="${index}">Remove Area</button><div class="profiles-section"><strong>Allowed Color Profiles:</strong>${allowedProfilesHtml || '<p>&nbsp;&nbsp;None</p>'}<button class="add-profile-btn primary" data-index="${index}" data-is-forbidden="false">Add Allowed Profile</button></div><div class="profiles-section"><strong>Forbidden Color Profiles:</strong>${forbiddenProfilesHtml || '<p>&nbsp;&nbsp;None</p>'}<button class="add-profile-btn danger" data-index="${index}" data-is-forbidden="true">Add Forbidden Profile</button></div>`; 
+            
+            // Create the enhanced area configuration HTML
+            areaElem.innerHTML = `
+                <h3>🐱 Cat Configuration - Area ${index + 1}</h3>
+                <div class="cat-config-section">
+                    <p><strong>Cat Name:</strong> <input type="text" value="${area.name}" class="area-prop" data-index="${index}" data-prop="name" placeholder="Enter cat name (e.g., Misa, Felix)"></p>
+                    <p><strong>Door ID:</strong> <input type="text" value="${area.door_id}" class="area-prop" data-index="${index}" data-prop="door_id" placeholder="door1"></p>
+                    
+                    <div class="cat-color-section" style="margin: 15px 0; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+                        <p><strong>🎨 Expected Cat Color Type:</strong></p>
+                        <div style="margin-left: 20px;">
+                            <label style="display: block; margin: 5px 0;">
+                                <input type="radio" name="cat_color_${index}" value="orange" ${(area.expected_color === 'orange') ? 'checked' : ''} class="cat-color-type" data-index="${index}"> 
+                                🟠 Lighter/Orange Cat (e.g., Misa, ginger cats)
+                            </label>
+                            <label style="display: block; margin: 5px 0;">
+                                <input type="radio" name="cat_color_${index}" value="black" ${(area.expected_color === 'black') ? 'checked' : ''} class="cat-color-type" data-index="${index}"> 
+                                ⚫ Darker/Black Cat (e.g., Felix, dark cats)
+                            </label>
+                            <label style="display: block; margin: 5px 0;">
+                                <input type="radio" name="cat_color_${index}" value="any" ${(!area.expected_color || area.expected_color === 'any') ? 'checked' : ''} class="cat-color-type" data-index="${index}"> 
+                                🔵 Any Cat (no color filtering)
+                            </label>
+                        </div>
+                        <p style="font-size: 0.85em; color: #666; margin-top: 8px;">
+                            💡 The Hailo AI will detect cats and verify their color matches this setting before opening the door.
+                        </p>
+                    </div>
+                    
+                    <div class="hailo-info-section" style="margin: 15px 0; padding: 10px; background: #e8f5e9; border-radius: 5px; border-left: 4px solid #4caf50;">
+                        <p style="margin: 5px 0;"><strong>⚡ Hailo AI Detection Active</strong></p>
+                        <p style="font-size: 0.85em; color: #555; margin: 5px 0;">
+                            ✅ Hardware-accelerated with Hailo-8L AI chip<br>
+                            🎯 Detection runs within your configured area<br>
+                            🐱 YOLOv6n model detecting cats at ~15 FPS<br>
+                            🎨 Color verification using your selected cat type
+                        </p>
+                    </div>
+                </div>
+                <button class="remove-btn danger" data-index="${index}">🗑️ Remove This Cat Area</button>
+            `; 
             areasContainer.appendChild(areaElem); 
         }); 
+        
+        // Add event listeners for detection method radio buttons
+        document.querySelectorAll('.detection-method').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const index = parseInt(this.dataset.index);
+                const method = this.value;
+                areas[index].detection_method = method;
+                
+                // Show/hide appropriate configuration sections
+                const sizeSection = document.querySelector(`.size-config-section[data-index="${index}"]`);
+                const yoloSection = document.querySelector(`.yolo-config-section[data-index="${index}"]`);
+                const colorSection = document.querySelector(`.color-config-section[data-index="${index}"]`);
+                
+                // Hide all sections first
+                sizeSection.style.display = 'none';
+                yoloSection.style.display = 'none';
+                colorSection.style.display = 'none';
+                
+                // Show the appropriate section
+                if (method === 'size_based') {
+                    sizeSection.style.display = 'block';
+                } else if (method === 'yolo_based') {
+                    yoloSection.style.display = 'block';
+                } else if (method === 'color_based') {
+                    colorSection.style.display = 'block';
+                }
+            });
+        });
+        
+        // Add event listeners for YOLO class checkboxes
+        document.querySelectorAll('.yolo-class').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const index = parseInt(this.dataset.index);
+                const className = this.dataset.class;
+                
+                if (!areas[index].yolo_classes) {
+                    areas[index].yolo_classes = [];
+                }
+                
+                if (this.checked) {
+                    if (!areas[index].yolo_classes.includes(className)) {
+                        areas[index].yolo_classes.push(className);
+                    }
+                } else {
+                    areas[index].yolo_classes = areas[index].yolo_classes.filter(c => c !== className);
+                }
+            });
+        });
+        
+        // Add event listeners for cat color type radio buttons
+        document.querySelectorAll('.cat-color-type').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const index = parseInt(this.dataset.index);
+                const colorType = this.value;
+                areas[index].expected_color = colorType;
+                console.log(`Area ${index} (${areas[index].name}) color type set to: ${colorType}`);
+            });
+        });
+        
+        // Render visual overlays after updating the areas list
+        setTimeout(renderAreaOverlays, 100); // Small delay to ensure DOM is updated
+    }
+    
+    // --- Visual Overlay Functions ---
+    function renderAreaOverlays() {
+        // Clear existing overlays
+        const existingOverlays = document.querySelectorAll('.area-overlay');
+        existingOverlays.forEach(overlay => overlay.remove());
+        
+        const snapshotWrapper = document.getElementById('snapshot-wrapper');
+        const snapshotImage = document.getElementById('snapshot-image');
+        
+        if (!snapshotImage || !snapshotImage.complete || !snapshotWrapper) return;
+        
+        // Calculate scaling factors
+        const scaleX = snapshotImage.offsetWidth / snapshotImage.naturalWidth;
+        const scaleY = snapshotImage.offsetHeight / snapshotImage.naturalHeight;
+        
+        areas.forEach((area, index) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'area-overlay';
+            overlay.dataset.areaIndex = index;
+            
+            // Position and size overlay
+            overlay.style.left = (area.x * scaleX) + 'px';
+            overlay.style.top = (area.y * scaleY) + 'px';
+            overlay.style.width = (area.width * scaleX) + 'px';
+            overlay.style.height = (area.height * scaleY) + 'px';
+            
+            // Add label
+            const label = document.createElement('div');
+            label.className = 'area-label';
+            label.textContent = area.name || `Area ${index + 1}`;
+            overlay.appendChild(label);
+            
+            // Add resize handles
+            const handles = ['nw', 'ne', 'sw', 'se'];
+            handles.forEach(handleType => {
+                const handle = document.createElement('div');
+                handle.className = `resize-handle ${handleType}`;
+                handle.dataset.handleType = handleType;
+                overlay.appendChild(handle);
+            });
+            
+            // Add event listeners
+            addOverlayListeners(overlay, index);
+            
+            snapshotWrapper.appendChild(overlay);
+        });
+    }
+    
+    function addOverlayListeners(overlay, areaIndex) {
+        let isDragging = false;
+        let isResizing = false;
+        let dragStart = { x: 0, y: 0 };
+        let originalArea = {};
+        let resizeHandle = null;
+        
+        // Mouse down on overlay (drag) or handle (resize)
+        overlay.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const snapshotImage = document.getElementById('snapshot-image');
+            const scaleX = snapshotImage.offsetWidth / snapshotImage.naturalWidth;
+            const scaleY = snapshotImage.offsetHeight / snapshotImage.naturalHeight;
+            
+            if (e.target.classList.contains('resize-handle')) {
+                // Start resizing
+                isResizing = true;
+                resizeHandle = e.target.dataset.handleType;
+                overlay.classList.add('dragging');
+                
+                originalArea = {
+                    x: areas[areaIndex].x,
+                    y: areas[areaIndex].y,
+                    width: areas[areaIndex].width,
+                    height: areas[areaIndex].height
+                };
+                
+                dragStart = {
+                    x: e.clientX,
+                    y: e.clientY
+                };
+            } else {
+                // Start dragging
+                isDragging = true;
+                overlay.classList.add('dragging');
+                
+                dragStart = {
+                    x: e.clientX - overlay.offsetLeft,
+                    y: e.clientY - overlay.offsetTop
+                };
+            }
+        });
+        
+        // Mouse move (global listener added below)
+        function handleMouseMove(e) {
+            if (isDragging) {
+                const snapshotWrapper = document.getElementById('snapshot-wrapper');
+                const snapshotImage = document.getElementById('snapshot-image');
+                const scaleX = snapshotImage.offsetWidth / snapshotImage.naturalWidth;
+                const scaleY = snapshotImage.offsetHeight / snapshotImage.naturalHeight;
+                
+                // Calculate new position
+                let newX = e.clientX - dragStart.x;
+                let newY = e.clientY - dragStart.y;
+                
+                // Constrain to image bounds
+                newX = Math.max(0, Math.min(newX, snapshotImage.offsetWidth - overlay.offsetWidth));
+                newY = Math.max(0, Math.min(newY, snapshotImage.offsetHeight - overlay.offsetHeight));
+                
+                // Update overlay position
+                overlay.style.left = newX + 'px';
+                overlay.style.top = newY + 'px';
+                
+                // Update area data
+                areas[areaIndex].x = Math.round(newX / scaleX);
+                areas[areaIndex].y = Math.round(newY / scaleY);
+                
+            } else if (isResizing) {
+                const snapshotImage = document.getElementById('snapshot-image');
+                const scaleX = snapshotImage.offsetWidth / snapshotImage.naturalWidth;
+                const scaleY = snapshotImage.offsetHeight / snapshotImage.naturalHeight;
+                
+                const deltaX = (e.clientX - dragStart.x) / scaleX;
+                const deltaY = (e.clientY - dragStart.y) / scaleY;
+                
+                let newArea = { ...originalArea };
+                
+                // Apply resize based on handle type
+                switch (resizeHandle) {
+                    case 'nw':
+                        newArea.x = originalArea.x + deltaX;
+                        newArea.y = originalArea.y + deltaY;
+                        newArea.width = originalArea.width - deltaX;
+                        newArea.height = originalArea.height - deltaY;
+                        break;
+                    case 'ne':
+                        newArea.y = originalArea.y + deltaY;
+                        newArea.width = originalArea.width + deltaX;
+                        newArea.height = originalArea.height - deltaY;
+                        break;
+                    case 'sw':
+                        newArea.x = originalArea.x + deltaX;
+                        newArea.width = originalArea.width - deltaX;
+                        newArea.height = originalArea.height + deltaY;
+                        break;
+                    case 'se':
+                        newArea.width = originalArea.width + deltaX;
+                        newArea.height = originalArea.height + deltaY;
+                        break;
+                }
+                
+                // Enforce minimum size
+                newArea.width = Math.max(20, newArea.width);
+                newArea.height = Math.max(20, newArea.height);
+                
+                // Constrain to image bounds
+                newArea.x = Math.max(0, Math.min(newArea.x, snapshotImage.naturalWidth - newArea.width));
+                newArea.y = Math.max(0, Math.min(newArea.y, snapshotImage.naturalHeight - newArea.height));
+                
+                // Update area data
+                areas[areaIndex] = { ...areas[areaIndex], ...newArea };
+                
+                // Update overlay
+                overlay.style.left = (newArea.x * scaleX) + 'px';
+                overlay.style.top = (newArea.y * scaleY) + 'px';
+                overlay.style.width = (newArea.width * scaleX) + 'px';
+                overlay.style.height = (newArea.height * scaleY) + 'px';
+            }
+        }
+        
+        // Mouse up (global listener added below)
+        function handleMouseUp() {
+            if (isDragging || isResizing) {
+                overlay.classList.remove('dragging');
+                isDragging = false;
+                isResizing = false;
+                resizeHandle = null;
+                
+                // Update the areas list display
+                renderAreas();
+                
+                // Remove global listeners
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            }
+        }
+        
+        // Add global listeners when starting drag/resize
+        overlay.addEventListener('mousedown', function() {
+            if (isDragging || isResizing) {
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            }
+        });
+    }
+    
+    // --- Size Preset Function ---
+    function applySizePreset(areaIndex, presetType) {
+        const presets = {
+            'small': { min: 3000, max: 8000, contour: 300 },
+            'medium': { min: 8000, max: 15000, contour: 500 },
+            'large': { min: 15000, max: 30000, contour: 700 }
+        };
+        
+        const preset = presets[presetType];
+        if (!preset) return;
+        
+        // Update the area object
+        areas[areaIndex].size_threshold_min = preset.min;
+        areas[areaIndex].size_threshold_max = preset.max;
+        areas[areaIndex].min_contour_area = preset.contour;
+        
+        // Update the UI inputs
+        document.querySelector(`input[data-index="${areaIndex}"][data-prop="size_threshold_min"]`).value = preset.min;
+        document.querySelector(`input[data-index="${areaIndex}"][data-prop="size_threshold_max"]`).value = preset.max;
+        document.querySelector(`input[data-index="${areaIndex}"][data-prop="min_contour_area"]`).value = preset.contour;
+        
+        statusMessage.textContent = `Applied ${presetType} cat preset to ${areas[areaIndex].name || 'Area ' + (areaIndex + 1)}`;
+        statusMessage.style.color = 'green';
+        setTimeout(() => { statusMessage.textContent = ''; }, 3000);
     }
     
     async function takeSnapshot() { 
@@ -193,7 +610,8 @@ document.addEventListener('DOMContentLoaded', () => {
             snapshotImage.id = 'snapshot-image'; 
             snapshotImage.src = imageUrl; 
             snapshotWrapper.appendChild(snapshotImage); 
-            snapshotImage.addEventListener('mousedown', startDrawing); 
+            snapshotImage.addEventListener('mousedown', startDrawing);
+            snapshotImage.addEventListener('load', renderAreaOverlays); 
             snapshotImage.addEventListener('mousemove', draw); 
             document.addEventListener('mouseup', stopDrawing); 
         } catch (error) { 
@@ -206,6 +624,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/config'); 
             const data = await response.json(); 
             areas = data.areas || []; 
+            
+            // Convert rect format [x, y, width, height] to individual properties
+            areas.forEach(area => {
+                if (area.rect && Array.isArray(area.rect) && area.rect.length === 4) {
+                    area.x = area.rect[0];
+                    area.y = area.rect[1];
+                    area.width = area.rect[2];
+                    area.height = area.rect[3];
+                }
+            });
+            
             renderAreas(); 
         } catch (error) { 
             console.error('Failed to load config:', error); 
@@ -214,7 +643,22 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function saveConfig() { 
         try { 
-            const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ areas: areas }) }); 
+            // Convert individual x, y, width, height properties back to rect format for saving
+            const areasToSave = areas.map(area => {
+                const areaCopy = { ...area };
+                if (areaCopy.x !== undefined && areaCopy.y !== undefined && 
+                    areaCopy.width !== undefined && areaCopy.height !== undefined) {
+                    areaCopy.rect = [areaCopy.x, areaCopy.y, areaCopy.width, areaCopy.height];
+                    // Remove individual properties to avoid duplication
+                    delete areaCopy.x;
+                    delete areaCopy.y;
+                    delete areaCopy.width;
+                    delete areaCopy.height;
+                }
+                return areaCopy;
+            });
+            
+            const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ areas: areasToSave }) }); 
             const result = await response.json(); 
             if (result.ok) { 
                 alert('Configuration saved!'); 
@@ -267,6 +711,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Window resize handler ---
+    window.addEventListener('resize', function() {
+        setTimeout(renderAreaOverlays, 100);
+    });
+    
     // --- Initial Load ---
     loadVideoInfo();
     loadConfig();

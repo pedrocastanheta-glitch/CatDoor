@@ -2,9 +2,23 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Cat Door Controller</title>
+    <meta name="description" content="Smart cat door remote control system">
+    <meta name="theme-color" content="#61dafb">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    
+    <!-- CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='mobile.css') }}">
+    
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Cat Door">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}">
 </head>
 <body>
 
@@ -15,6 +29,11 @@
                 <div style="display: flex; align-items: center; gap: 15px;">
                     <h1 style="margin: 0;">Cat Door Controller</h1>
                     <button class="nav-link" onclick="location.reload()">Refresh</button>
+                    {% if local_access %}
+                    <button class="nav-link shutdown-btn" onclick="shutdownPi()" title="Shutdown Raspberry Pi">Shutdown</button>
+                    {% else %}
+                    <button class="nav-link shutdown-btn disabled" onclick="showShutdownRestriction()" title="Shutdown only available for local access">🔒 Shutdown</button>
+                    {% endif %}
                 </div>
                 <a href="/setup" class="nav-link">Go to Setup Page</a>
             </div>
@@ -24,9 +43,56 @@
     <div class="layout-container">
         
         <div class="layout-left">
+            <!-- Full Camera View -->
             <div class="card">
-                <h2>Live Camera</h2>
-                <img src="{{ url_for('video_feed') }}" alt="Live Camera Feed">
+                <h2>🎥 Full Camera View with AI Detection</h2>
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 0.9em;">
+                    Real-time detection with all configured areas
+                </p>
+                <div id="video-container" style="position: relative; display: inline-block; background: #000; border: 2px solid #ddd; border-radius: 8px;">
+                    <img id="video-feed" src="{{ url_for('video_feed') }}" alt="Live Camera Feed with AI Detection" 
+                         style="display: block; border-radius: 6px; max-width: 100%; height: auto;">
+                    <div style="position: absolute; top: 5px; left: 5px; background: rgba(0,0,0,0.7); color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em;">
+                        FULL VIEW
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Individual Area Streams -->
+            <div class="card" id="area-streams-card" style="display: none;">
+                <h2>📹 Detection Area Streams</h2>
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 0.9em;">
+                    Individual cropped views for each configured area
+                </p>
+                <div id="area-streams" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 10px;">
+                    <!-- Area streams will be dynamically added here -->
+                </div>
+            </div>
+            
+            <!-- Activity Log Section -->
+            <div class="card">
+                <h2>📋 Detection Activity Log</h2>
+                <p style="margin: 0 0 10px 0; color: #666; font-size: 0.9em;">
+                    Recent cat detection events and door actions
+                </p>
+                <div id="activity-log" style="
+                    background: #f9f9f9; 
+                    border: 1px solid #ddd; 
+                    border-radius: 5px; 
+                    padding: 10px; 
+                    height: 250px; 
+                    overflow-y: auto; 
+                    font-family: 'Courier New', monospace; 
+                    font-size: 0.85em;
+                    line-height: 1.6;
+                ">
+                    <div style="color: #999; text-align: center; padding: 20px;">
+                        Waiting for detection events...
+                    </div>
+                </div>
+                <button onclick="clearActivityLog()" class="secondary" style="margin-top: 10px; font-size: 0.85em;">
+                    Clear Log
+                </button>
             </div>
         </div>
 
@@ -130,8 +196,270 @@
             console.error('Error updating PIR status:', error); 
         } 
     }
-    async function doorAction(doorId, action) { try { const statusElement = document.getElementById(`${doorId}-status`); if (statusElement) statusElement.textContent = '...'; await fetch(`/api/door/${doorId}/${action}`, { method: 'POST' }); updateDoorStatus(); updateOverrideStatus(); } catch (error) { console.error(`Failed to ${action} ${doorId}:`, error); } }
-    document.addEventListener('DOMContentLoaded', () => { updateDoorStatus(); updatePiTemp(); updateOverrideStatus(); updateSwitchStatus(); updatePirStatus(); setInterval(updateDoorStatus, 3000); setInterval(updatePiTemp, 10000); setInterval(updateOverrideStatus, 3000); setInterval(updateSwitchStatus, 1000); setInterval(updatePirStatus, 500); });
+    
+    async function shutdownPi() {
+        if (!confirm('Are you sure you want to shutdown the Raspberry Pi?\n\nThis will power off the device completely.')) {
+            return;
+        }
+        
+        if (!confirm('🔴 FINAL CONFIRMATION\n\nClick OK to shutdown the Pi immediately.\nYou will need physical access to restart it.')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/shutdown', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (result.ok) {
+                alert(result.message);
+                // Disable all controls and show shutdown message
+                document.body.innerHTML = `
+                    <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; text-align: center; background: #1a1a1a; color: #fff;">
+                        <h1 style="color: #ff6b6b; margin-bottom: 20px;">🔌 Raspberry Pi Shutting Down</h1>
+                        <p style="font-size: 18px; margin-bottom: 10px;">The system is powering off...</p>
+                        <p style="font-size: 16px; color: #888;">You can safely unplug the device once the LED stops blinking.</p>
+                    </div>
+                `;
+            } else {
+                // Handle access restriction
+                if (response.status === 403 && result.error && result.error.includes('only available when accessing from the Raspberry Pi')) {
+                    alert('🚫 SHUTDOWN RESTRICTED\n\n' + result.error + '\n\nFor security, shutdown is only available when accessing the web interface directly from the Raspberry Pi itself (e.g., using a browser on the Pi with localhost or the Pi\'s local IP address).');
+                } else {
+                    alert('Shutdown failed: ' + result.error);
+                }
+            }
+        } catch (error) {
+            console.error('Shutdown request failed:', error);
+            alert('Failed to shutdown: Network error. Please try again.');
+        }
+    }
+    
+    function showShutdownRestriction() {
+        alert('🚫 SHUTDOWN RESTRICTED\n\nFor security reasons, the shutdown function is only available when accessing the web interface directly from the Raspberry Pi itself.\n\nTo use shutdown:\n• Connect a monitor and keyboard to the Pi\n• Open a browser on the Pi\n• Navigate to localhost:5000 or the Pi\'s local IP\n• The shutdown button will then be enabled\n\nAlternatively, you can SSH into the Pi and run:\nsudo shutdown -h now');
+    }
+    
+    // Activity Log Functions
+    let lastDetectionState = {};
+    const maxLogEntries = 50;
+    
+    function addActivityLog(message, type = 'info') {
+        const logContainer = document.getElementById('activity-log');
+        if (!logContainer) return;
+        
+        // Remove placeholder if it exists
+        const placeholder = logContainer.querySelector('div[style*="color: #999"]');
+        if (placeholder) {
+            placeholder.remove();
+        }
+        
+        const timestamp = new Date().toLocaleString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+        
+        const entry = document.createElement('div');
+        entry.style.marginBottom = '5px';
+        entry.style.paddingBottom = '5px';
+        entry.style.borderBottom = '1px solid #e0e0e0';
+        
+        // Color coding based on type
+        let color = '#333';
+        let icon = 'ℹ️';
+        if (type === 'success') {
+            color = '#28a745';
+            icon = '✅';
+        } else if (type === 'warning') {
+            color = '#ff9800';
+            icon = '⚠️';
+        } else if (type === 'error') {
+            color = '#dc3545';
+            icon = '❌';
+        } else if (type === 'door') {
+            color = '#007bff';
+            icon = '🚪';
+        } else if (type === 'cat') {
+            color = '#6c757d';
+            icon = '🐱';
+        }
+        
+        entry.innerHTML = `<span style="color: #999;">${timestamp}</span> ${icon} <span style="color: ${color};">${message}</span>`;
+        
+        // Add to top of log
+        logContainer.insertBefore(entry, logContainer.firstChild);
+        
+        // Limit log entries
+        const entries = logContainer.querySelectorAll('div[style*="marginBottom"]');
+        if (entries.length > maxLogEntries) {
+            entries[entries.length - 1].remove();
+        }
+    }
+    
+    function clearActivityLog() {
+        const logContainer = document.getElementById('activity-log');
+        if (!logContainer) return;
+        
+        logContainer.innerHTML = `
+            <div style="color: #999; text-align: center; padding: 20px;">
+                Waiting for detection events...
+            </div>
+        `;
+        lastDetectionState = {};
+    }
+    
+    async function updateDetectionLog() {
+        try {
+            const response = await fetch('/api/event_log?count=20');
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            if (!data.ok || !data.events || data.events.length === 0) return;
+            
+            const logContainer = document.getElementById('activity-log');
+            if (!logContainer) return;
+            
+            // Clear existing log
+            logContainer.innerHTML = '';
+            
+            // Display events (newest first)
+            data.events.forEach(event => {
+                let logType = 'info';
+                
+                // Determine log type based on event type
+                if (event.type === 'cat_detected') {
+                    logType = 'success';
+                } else if (event.type === 'color_mismatch') {
+                    logType = 'warning';
+                } else if (event.type === 'door_action') {
+                    logType = 'door';
+                } else if (event.type === 'manual_action') {
+                    logType = 'door';
+                }
+                
+                // Create log entry
+                const entry = document.createElement('div');
+                entry.style.padding = '5px 10px';
+                entry.style.borderBottom = '1px solid #eee';
+                entry.style.fontSize = '0.85em';
+                
+                // Color coding
+                const colors = {
+                    'success': '#2ecc71',
+                    'warning': '#f39c12',
+                    'error': '#e74c3c',
+                    'door': '#3498db',
+                    'info': '#95a5a6',
+                    'cat': '#999'
+                };
+                entry.style.borderLeft = `3px solid ${colors[logType] || '#999'}`;
+                
+                entry.innerHTML = `
+                    <span style="color: #666; font-size: 0.9em;">${event.timestamp}</span>
+                    <span style="margin-left: 10px;">${event.message}</span>
+                `;
+                
+                logContainer.appendChild(entry);
+            });
+        } catch (error) {
+            console.error('Error updating event log:', error);
+        }
+    }
+    
+    async function doorAction(doorId, action) { 
+        try { 
+            const statusElement = document.getElementById(`${doorId}-status`); 
+            if (statusElement) statusElement.textContent = '...'; 
+            await fetch(`/api/door/${doorId}/${action}`, { method: 'POST' }); 
+            updateDoorStatus(); 
+            updateOverrideStatus();
+            // Refresh event log after door action
+            setTimeout(updateDetectionLog, 500);
+        } catch (error) { 
+            console.error(`Failed to ${action} ${doorId}:`, error); 
+        } 
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => { 
+        updateDoorStatus(); 
+        updatePiTemp(); 
+        updateOverrideStatus(); 
+        updateSwitchStatus(); 
+        updatePirStatus(); 
+        updateDetectionLog();
+        loadAreaStreams();  // Load area streams on page load
+        setInterval(updateDoorStatus, 3000); 
+        setInterval(updatePiTemp, 10000); 
+        setInterval(updateOverrideStatus, 3000); 
+        setInterval(updateSwitchStatus, 1000); 
+        setInterval(updatePirStatus, 500); 
+        setInterval(updateDetectionLog, 1000); 
+    });
+    
+    // Load individual area streams
+    async function loadAreaStreams() {
+        try {
+            const response = await fetch('/api/areas');
+            if (!response.ok) return;
+            const data = await response.json();
+            const areas = data.areas || [];
+            
+            if (areas.length === 0) {
+                // No areas configured, hide the card
+                document.getElementById('area-streams-card').style.display = 'none';
+                return;
+            }
+            
+            // Show the area streams card
+            document.getElementById('area-streams-card').style.display = 'block';
+            
+            const container = document.getElementById('area-streams');
+            container.innerHTML = ''; // Clear existing content
+            
+            // Create a stream for each area
+            areas.forEach(area => {
+                const areaDiv = document.createElement('div');
+                areaDiv.style.cssText = 'position: relative; background: #000; border: 2px solid #ddd; border-radius: 8px; overflow: hidden;';
+                
+                // Color indicator based on expected cat
+                let colorIndicator = '';
+                if (area.expected_color === 'orange') {
+                    colorIndicator = '🟠';
+                } else if (area.expected_color === 'black') {
+                    colorIndicator = '⚫';
+                } else {
+                    colorIndicator = '🐱';
+                }
+                
+                areaDiv.innerHTML = `
+                    <img src="/video_feed/${encodeURIComponent(area.name)}" 
+                         alt="${area.name}" 
+                         style="width: 100%; height: auto; display: block; border-radius: 6px;">
+                    <div style="position: absolute; top: 5px; left: 5px; background: rgba(0,0,0,0.8); color: white; padding: 4px 8px; border-radius: 3px; font-size: 0.85em; font-weight: bold;">
+                        ${colorIndicator} ${area.name}
+                    </div>
+                    <div style="position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.7); color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.75em;">
+                        ${area.door_id.toUpperCase()}
+                    </div>
+                `;
+                
+                container.appendChild(areaDiv);
+            });
+            
+            console.log(`Loaded ${areas.length} area stream(s)`);
+        } catch (error) {
+            console.error('Error loading area streams:', error);
+        }
+    }
+
 </script>
 
 </body>
