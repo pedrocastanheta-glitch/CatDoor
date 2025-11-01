@@ -43,11 +43,39 @@ p {
     border-radius: 4px;
     font-size: 0.9em;
     transition: background-color 0.2s;
+    border: none;
+    cursor: pointer;
 }
 
 .nav-link:hover {
     background-color: #5a6268;
     text-decoration: none;
+}
+
+/* Shutdown button styling */
+.nav-link.shutdown-btn {
+    background-color: #dc3545;
+    margin-left: 5px;
+}
+
+.nav-link.shutdown-btn:hover:not(.disabled) {
+    background-color: #c82333;
+}
+
+.nav-link.shutdown-btn:active:not(.disabled) {
+    background-color: #bd2130;
+}
+
+.nav-link.shutdown-btn.disabled {
+    background-color: #6c757d;
+    color: #adb5bd;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.nav-link.shutdown-btn.disabled:hover {
+    background-color: #6c757d;
+    transform: none;
 }
 
 img {

@@ -1,0 +1,252 @@
+/* Mobile-optimized CSS for Cat Door Interface */
+
+/* Mobile-first responsive design */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+        margin: 0;
+    }
+    
+    .layout-container {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .layout-left, .layout-right {
+        width: 100%;
+        min-width: unset;
+    }
+    
+    /* Larger touch targets for mobile */
+    button {
+        min-height: 44px;
+        font-size: 16px;
+        padding: 12px 20px;
+        margin: 5px;
+    }
+    
+    /* Mobile-friendly video */
+    img[src*="video_feed"] {
+        width: 100%;
+        height: auto;
+        max-height: 50vh;
+        object-fit: contain;
+    }
+    
+    /* Status text sizing */
+    .card h2 {
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+    
+    .card div {
+        font-size: 14px;
+        line-height: 1.4;
+        margin: 8px 0;
+    }
+    
+    /* Door control buttons */
+    .door-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .door-controls button {
+        width: 100%;
+        border-radius: 8px;
+    }
+    
+    /* Header adjustments */
+    .header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+    
+    .header h1 {
+        font-size: 20px;
+        margin: 0;
+    }
+    
+    /* Navigation */
+    .nav-link {
+        display: block;
+        width: 100%;
+        text-align: center;
+        padding: 10px;
+        margin: 5px 0;
+    }
+    
+    /* Status indicators */
+    .status-indicator {
+        font-size: 16px;
+        font-weight: bold;
+        padding: 8px 12px;
+        border-radius: 6px;
+        margin: 5px 0;
+        text-align: center;
+    }
+    
+    .status-open {
+        background-color: #22c55e;
+        color: white;
+    }
+    
+    .status-close {
+        background-color: #ef4444;
+        color: white;
+    }
+    
+    .status-opening, .status-closing {
+        background-color: #f59e0b;
+        color: white;
+        animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    
+    /* PWA-style app bar */
+    .app-bar {
+        position: sticky;
+        top: 0;
+        background: var(--card);
+        border-bottom: 1px solid var(--line);
+        z-index: 100;
+        padding: 10px;
+    }
+    
+    /* Quick action buttons */
+    .quick-actions {
+        display: flex;
+        gap: 10px;
+        margin: 15px 0;
+    }
+    
+    .quick-actions button {
+        flex: 1;
+        font-size: 14px;
+        padding: 8px;
+    }
+    
+    /* Emergency controls */
+    .emergency-controls {
+        background: #fee2e2;
+        border: 2px solid #ef4444;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 15px 0;
+        text-align: center;
+    }
+    
+    .emergency-controls h3 {
+        color: #dc2626;
+        margin: 0 0 10px 0;
+        font-size: 16px;
+    }
+    
+    .emergency-stop {
+        background: #dc2626;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-weight: bold;
+        width: 100%;
+    }
+}
+
+/* Landscape orientation adjustments */
+@media (max-width: 768px) and (orientation: landscape) {
+    .layout-container {
+        flex-direction: row;
+    }
+    
+    .layout-left {
+        flex: 2;
+    }
+    
+    .layout-right {
+        flex: 1;
+    }
+    
+    img[src*="video_feed"] {
+        max-height: 70vh;
+    }
+}
+
+/* Very small screens (old phones) */
+@media (max-width: 480px) {
+    .container {
+        padding: 5px;
+    }
+    
+    .card {
+        padding: 10px;
+        margin: 5px 0;
+    }
+    
+    button {
+        font-size: 14px;
+        padding: 10px 16px;
+    }
+    
+    .header h1 {
+        font-size: 18px;
+    }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+    /* Larger tap targets */
+    button, .nav-link, input[type="button"] {
+        min-height: 48px;
+        min-width: 48px;
+    }
+    
+    /* Remove hover effects */
+    button:hover, .nav-link:hover {
+        transform: none;
+        box-shadow: none;
+    }
+    
+    /* Active states for touch feedback */
+    button:active {
+        transform: scale(0.98);
+        background-color: var(--accent);
+    }
+    
+    /* Disable text selection on buttons */
+    button, .nav-link {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
+}
+
+/* Dark mode improvements for mobile */
+@media (prefers-color-scheme: dark) {
+    .status-indicator {
+        border: 1px solid var(--line);
+    }
+    
+    .emergency-controls {
+        background: #450a0a;
+        border-color: #dc2626;
+    }
+}
+
+/* PWA status bar styling */
+@media (display-mode: standalone) {
+    .app-bar {
+        padding-top: env(safe-area-inset-top);
+        background: var(--bg);
+    }
+    
+    .container {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
