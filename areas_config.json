@@ -9,9 +9,22 @@
         529,
         450
       ],
+      "detection_method": "size_based",
+      "size_threshold_min": 8000,
+      "size_threshold_max": 15000,
+      "min_contour_area": 500,
+      "motion_sensitivity": 20,
       "profiles": [],
       "forbidden_profiles": [],
-      "min_pixels": 100
+      "min_pixels": 100,
+      "color_profiles": [
+        {
+          "name": "ginger",
+          "hsv_lo": [5, 70, 60],
+          "hsv_hi": [25, 255, 255],
+          "min_ratio": 0.12
+        }
+      ]
     },
     {
       "name": "Felix",
@@ -22,9 +35,22 @@
         645,
         425
       ],
+      "detection_method": "size_based",
+      "size_threshold_min": 15000,
+      "size_threshold_max": 30000,
+      "min_contour_area": 500,
+      "motion_sensitivity": 20,
       "profiles": [],
       "forbidden_profiles": [],
-      "min_pixels": 100
+      "min_pixels": 100,
+      "color_profiles": [
+        {
+          "name": "black",
+          "hsv_lo": [0, 0, 0],
+          "hsv_hi": [179, 255, 90],
+          "min_ratio": 0.2
+        }
+      ]
     }
   ]
 }
